@@ -99,10 +99,10 @@ return [
 
     // Books
     'book' => 'Handbook',
-    'books' => 'Handboooks',
+    'books' => 'Handbooks',
     'x_books' => ':count Handbook|:count Handbooks',
     'books_empty' => 'No handbooks have been created',
-    'books_popular' => 'Popular Handboooks',
+    'books_popular' => 'Popular Handbooks',
     'books_recent' => 'Recent Handbooks',
     'books_new' => 'New Handbooks',
     'books_new_action' => 'New Handbook',
