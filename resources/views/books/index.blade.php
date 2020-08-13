@@ -43,7 +43,7 @@
                 </a>
             @endif
 
-            @include('partials.view-toggle', ['view' => $view, 'type' => 'books'])
+            {{-- @include('partials.view-toggle', ['view' => $view, 'type' => 'books']) --}}
         </div>
     </div>
 

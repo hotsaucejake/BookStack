@@ -95,7 +95,7 @@
                 </a>
             @endif
 
-            @include('partials.view-toggle', ['view' => $view, 'type' => 'shelf'])
+            {{-- @include('partials.view-toggle', ['view' => $view, 'type' => 'shelf']) --}}
 
             <hr class="primary-background">
 
