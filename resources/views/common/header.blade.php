@@ -50,32 +50,35 @@
                 </div>
                 @if(signedInUser())
                     <?php $currentUser = user(); ?>
-                    <div class="dropdown-container" dropdown>
-                        <span class="user-name py-s hide-under-l" dropdown-toggle
-                              aria-haspopup="true" aria-expanded="false" aria-label="{{ trans('common.profile_menu') }}" tabindex="0">
-                            <img class="avatar" src="{{$currentUser->getAvatar(30)}}" alt="{{ $currentUser->name }}">
-                            <span class="name">{{ $currentUser->getShortName(9) }}</span> @icon('caret-down')
-                        </span>
-                        <ul class="dropdown-menu" role="menu">
-                            <li>
-                                <a href="{{ url("/user/{$currentUser->id}") }}">@icon('user'){{ trans('common.view_profile') }}</a>
-                            </li>
-                            <li>
-                                <a href="{{ url("/settings/users/{$currentUser->id}") }}">@icon('edit'){{ trans('common.edit_profile') }}</a>
-                            </li>
-                            <li>
-                                @if(config('auth.method') === 'saml2')
-                                    <a href="{{ url('/saml2/logout') }}">@icon('logout'){{ trans('auth.logout') }}</a>
-                                @else
-                                    <a href="{{ url('/logout') }}">@icon('logout'){{ trans('auth.logout') }}</a>
-                                @endif
-                            </li>
-                            <li><hr></li>
-                            <li>
-                                @include('partials.dark-mode-toggle')
-                            </li>
-                        </ul>
-                    </div>
+                    @if ($currentUser->hasSystemRole('admin'))
+                        <div class="dropdown-container" dropdown>
+                            <span class="user-name py-s hide-under-l" dropdown-toggle
+                                aria-haspopup="true" aria-expanded="false" aria-label="{{ trans('common.profile_menu') }}" tabindex="0">
+                                <img class="avatar" src="{{$currentUser->getAvatar(30)}}" alt="{{ $currentUser->name }}">
+                                <span class="name">{{ $currentUser->getShortName(9) }}</span> @icon('caret-down')
+                            </span>
+                            <ul class="dropdown-menu" role="menu">
+                                <li>
+                                    <a href="{{ url("/user/{$currentUser->id}") }}">@icon('user'){{ trans('common.view_profile') }}</a>
+                                </li>
+                                <li>
+                                    <a href="{{ url("/settings/users/{$currentUser->id}") }}">@icon('edit'){{ trans('common.edit_profile') }}</a>
+                                </li>
+                                <li>
+                                    @if(config('auth.method') === 'saml2')
+                                        <a href="{{ url('/saml2/logout') }}">@icon('logout'){{ trans('auth.logout') }}</a>
+                                    @else
+                                        <a href="{{ url('/logout') }}">@icon('logout'){{ trans('auth.logout') }}</a>
+                                    @endif
+                                </li>
+                                <li><hr></li>
+                                <li>
+                                    @include('partials.dark-mode-toggle')
+                                </li>
+                            </ul>
+                        </div>
+                    @endif
+                    
                 @endif
             </nav>
         </div>
