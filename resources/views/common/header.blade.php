@@ -72,9 +72,9 @@
                                     @endif
                                 </li>
                                 <li><hr></li>
-                                <li>
+                                {{-- <li>
                                     @include('partials.dark-mode-toggle')
-                                </li>
+                                </li> --}}
                             </ul>
                         </div>
                     @endif

@@ -3,7 +3,7 @@
 @section('body')
 
     <div class="container px-xl py-s">
-        <div class="grid half">
+        {{-- <div class="grid half">
             <div>
                 <div class="icon-list inline block">
                     @include('components.expand-toggle', ['target' => '.entity-list.compact .entity-item-snippet', 'key' => 'home-details'])
@@ -14,7 +14,7 @@
                     @include('partials.dark-mode-toggle', ['classes' => 'text-muted icon-list-item text-primary'])
                 </div>
             </div>
-        </div>
+        </div> --}}
     </div>
 
     <div class="container" id="home-default">
