@@ -83,5 +83,4 @@ class Saml2Controller extends Controller
 
         return redirect()->intended();
     }
-
 }

@@ -21,7 +21,8 @@ class ApiDocsController extends ApiController
     /**
      * Show a JSON view of the API docs data.
      */
-    public function json() {
+    public function json()
+    {
         $docs = $this->getDocs();
         return response()->json($docs);
     }
@@ -43,5 +44,4 @@ class ApiDocsController extends ApiController
 
         return $docs;
     }
-
 }
