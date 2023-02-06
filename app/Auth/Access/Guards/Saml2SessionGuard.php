@@ -36,5 +36,4 @@ class Saml2SessionGuard extends ExternalBaseSessionGuard
     {
         return false;
     }
-
 }

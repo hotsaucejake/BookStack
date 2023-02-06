@@ -301,5 +301,4 @@ class ExternalBaseSessionGuard implements StatefulGuard
 
         return $this;
     }
-
 }

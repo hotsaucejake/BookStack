@@ -105,5 +105,4 @@ class RegistrationService
             throw new UserRegistrationException(trans('auth.registration_email_domain_invalid'), $redirect);
         }
     }
-
 }
