@@ -1,45 +1,45 @@
-<?php namespace BookStack\Http\Controllers\Api;
+<?php
 
-use BookStack\Entities\Book;
-use BookStack\Entities\ExportService;
-use BookStack\Entities\Repos\BookRepo;
+namespace BookStack\Http\Controllers\Api;
+
+use BookStack\Entities\Models\Book;
+use BookStack\Entities\Tools\ExportFormatter;
 use Throwable;
 
 class BookExportApiController extends ApiController
 {
-    protected $bookRepo;
-    protected $exportService;
+    protected $exportFormatter;
 
-    /**
-     * BookExportController constructor.
-     */
-    public function __construct(BookRepo $bookRepo, ExportService $exportService)
+    public function __construct(ExportFormatter $exportFormatter)
     {
-        $this->bookRepo = $bookRepo;
-        $this->exportService = $exportService;
-        parent::__construct();
+        $this->exportFormatter = $exportFormatter;
+        $this->middleware('can:content-export');
     }
 
     /**
      * Export a book as a PDF file.
+     *
      * @throws Throwable
      */
     public function exportPdf(int $id)
     {
         $book = Book::visible()->findOrFail($id);
-        $pdfContent = $this->exportService->bookToPdf($book);
-        return $this->downloadResponse($pdfContent, $book->slug . '.pdf');
+        $pdfContent = $this->exportFormatter->bookToPdf($book);
+
+        return $this->download()->directly($pdfContent, $book->slug . '.pdf');
     }
 
     /**
      * Export a book as a contained HTML file.
+     *
      * @throws Throwable
      */
     public function exportHtml(int $id)
     {
         $book = Book::visible()->findOrFail($id);
-        $htmlContent = $this->exportService->bookToContainedHtml($book);
-        return $this->downloadResponse($htmlContent, $book->slug . '.html');
+        $htmlContent = $this->exportFormatter->bookToContainedHtml($book);
+
+        return $this->download()->directly($htmlContent, $book->slug . '.html');
     }
 
     /**
@@ -48,7 +48,19 @@ class BookExportApiController extends ApiController
     public function exportPlainText(int $id)
     {
         $book = Book::visible()->findOrFail($id);
-        $textContent = $this->exportService->bookToPlainText($book);
-        return $this->downloadResponse($textContent, $book->slug . '.txt');
+        $textContent = $this->exportFormatter->bookToPlainText($book);
+
+        return $this->download()->directly($textContent, $book->slug . '.txt');
+    }
+
+    /**
+     * Export a book as a markdown file.
+     */
+    public function exportMarkdown(int $id)
+    {
+        $book = Book::visible()->findOrFail($id);
+        $markdown = $this->exportFormatter->bookToMarkdown($book);
+
+        return $this->download()->directly($markdown, $book->slug . '.md');
     }
 }

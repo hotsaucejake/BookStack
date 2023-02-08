@@ -5,7 +5,7 @@
 body, button, input, select, label, textarea {
   font-family: $text;
 }
-.Codemirror, pre, #markdown-editor-input, .editor-toolbar, .code-base {
+.Codemirror, pre, #markdown-editor-input, .text-mono, .code-base {
   font-family: $mono;
 }
 
@@ -90,15 +90,12 @@ h2.list-heading {
  * Link styling
  */
 a {
-  color: var(--color-primary);
+  color: var(--color-link);
   fill: currentColor;
   cursor: pointer;
   text-decoration: none;
   transition: filter ease-in-out 80ms;
   line-height: 1.6;
-  @include whenDark {
-    filter: brightness(1.3) saturate(0.7);
-  }
   &:hover {
     text-decoration: underline;
   }
@@ -110,8 +107,15 @@ a {
     display: inline-block;
   }
   &:focus img:only-child {
-    outline: 2px dashed var(--color-primary);
+    outline: 2px dashed var(--color-link);
     outline-offset: 2px;
+  }
+}
+
+a.no-link-style {
+  color: inherit;
+  &:hover {
+    text-decoration: none;
   }
 }
 
@@ -133,10 +137,13 @@ p, ul, ol, pre, table, blockquote {
 hr {
   border: 0;
   height: 1px;
-  @include lightDark(background, #eaeaea, #222);
+  @include lightDark(background, #eaeaea, #555);
   margin-bottom: $-l;
   &.faded {
     background-image: linear-gradient(to right, #FFF, #e3e0e0 20%, #e3e0e0 80%, #FFF);
+  }
+  &.darker {
+    @include lightDark(background, #DDD, #666);
   }
   &.margin-top, &.even {
     margin-top: $-l;
@@ -156,7 +163,6 @@ em, i, .italic {
 
 small, p.small, span.small, .text-small {
   font-size: 0.75rem;
-  @include lightDark(color, #5e5e5e, #999);
 }
 
 sup, .superscript {
@@ -268,18 +274,17 @@ span.highlight {
  * Lists
  */
 ul, ol {
+  padding-left: $-m * 2.0;
+  padding-right: $-m * 2.0;
+  display: flow-root;
   p {
     margin: 0;
   }
 }
 ul {
-  padding-left: $-m * 1.3;
-  padding-right: $-m * 1.3;
   list-style: disc;
   ul {
     list-style: circle;
-    margin-top: 0;
-    margin-bottom: 0;
   }
   label {
     margin: 0;
@@ -288,23 +293,29 @@ ul {
 
 ol {
   list-style: decimal;
-  padding-left: $-m * 2;
-  padding-right: $-m * 2;
-}
-
-li.checkbox-item, li.task-list-item {
-  list-style: none;
-  margin-left: - ($-m * 1.3);
-  input[type="checkbox"] {
-    margin-right: $-xs;
-  }
 }
 
 li > ol, li > ul {
-  margin-block-end: 0px;
-  margin-block-start: 0px;
-  padding-block-end: 0px;
-  padding-block-start: 0px;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-block-end: 0;
+  margin-block-start: 0;
+  padding-block-end: 0;
+  padding-block-start: 0;
+  padding-left: $-m * 1.2;
+  padding-right: $-m * 1.2;
+}
+
+li.checkbox-item, li.task-list-item {
+  display: list-item;
+  list-style: none;
+  margin-left: -($-m * 1.2);
+  input[type="checkbox"] {
+    margin-right: $-xs;
+  }
+  li.checkbox-item, li.task-list-item {
+    margin-left: $-xs;
+  }
 }
 
 /*
@@ -355,10 +366,19 @@ li > ol, li > ul {
   overflow-wrap: break-word;
 }
 
-.limit-text {
+.text-limit-lines-1 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.text-limit-lines-2 {
+  // -webkit use here is actually standardised cross-browser:
+  // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-line-clamp
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 /**

@@ -1,41 +1,68 @@
-<?php namespace Tests\Auth;
+<?php
 
+namespace Tests\Auth;
 
 use BookStack\Auth\Access\UserInviteService;
 use BookStack\Auth\User;
 use BookStack\Notifications\UserInvite;
 use Carbon\Carbon;
-use DB;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
-use Notification;
 use Tests\TestCase;
 
 class UserInviteTest extends TestCase
 {
-
     public function test_user_creation_creates_invite()
     {
         Notification::fake();
-        $admin = $this->getAdmin();
+        $admin = $this->users->admin();
 
-        $this->actingAs($admin)->post('/settings/users/create', [
-            'name' => 'Barry',
-            'email' => 'tester@example.com',
+        $email = Str::random(16) . '@example.com';
+        $resp = $this->actingAs($admin)->post('/settings/users/create', [
+            'name'        => 'Barry',
+            'email'       => $email,
             'send_invite' => 'true',
         ]);
+        $resp->assertRedirect('/settings/users');
 
-        $newUser = User::query()->where('email', '=', 'tester@example.com')->orderBy('id', 'desc')->first();
+        $newUser = User::query()->where('email', '=', $email)->orderBy('id', 'desc')->first();
 
         Notification::assertSentTo($newUser, UserInvite::class);
         $this->assertDatabaseHas('user_invites', [
-            'user_id' => $newUser->id
+            'user_id' => $newUser->id,
         ]);
+    }
+
+    public function test_user_invite_sent_in_selected_language()
+    {
+        Notification::fake();
+        $admin = $this->users->admin();
+
+        $email = Str::random(16) . '@example.com';
+        $resp = $this->actingAs($admin)->post('/settings/users/create', [
+            'name'        => 'Barry',
+            'email'       => $email,
+            'send_invite' => 'true',
+            'language'    => 'de',
+        ]);
+        $resp->assertRedirect('/settings/users');
+
+        $newUser = User::query()->where('email', '=', $email)->orderBy('id', 'desc')->first();
+        Notification::assertSentTo($newUser, UserInvite::class, function ($notification, $channels, $notifiable) {
+            /** @var MailMessage $mail */
+            $mail = $notification->toMail($notifiable);
+
+            return 'Sie wurden eingeladen BookStack beizutreten!' === $mail->subject &&
+                'Ein Konto wurde für Sie auf BookStack erstellt.' === $mail->greeting;
+        });
     }
 
     public function test_invite_set_password()
     {
         Notification::fake();
-        $user = $this->getViewer();
+        $user = $this->users->viewer();
         $inviteService = app(UserInviteService::class);
 
         $inviteService->sendInvitation($user);
@@ -50,21 +77,21 @@ class UserInviteTest extends TestCase
         $setPasswordResp = $this->followingRedirects()->post('/register/invite/' . $token, [
             'password' => 'my test password',
         ]);
-        $setPasswordResp->assertSee('Password set, you now have access to BookStack!');
+        $setPasswordResp->assertSee('Password set, you should now be able to login using your set password to access BookStack!');
         $newPasswordValid = auth()->validate([
-            'email' => $user->email,
-            'password' => 'my test password'
+            'email'    => $user->email,
+            'password' => 'my test password',
         ]);
         $this->assertTrue($newPasswordValid);
         $this->assertDatabaseMissing('user_invites', [
-            'user_id' => $user->id
+            'user_id' => $user->id,
         ]);
     }
 
     public function test_invite_set_has_password_validation()
     {
         Notification::fake();
-        $user = $this->getViewer();
+        $user = $this->users->viewer();
         $inviteService = app(UserInviteService::class);
 
         $inviteService->sendInvitation($user);
@@ -83,7 +110,7 @@ class UserInviteTest extends TestCase
         $noPassword->assertSee('The password field is required.');
 
         $this->assertDatabaseHas('user_invites', [
-            'user_id' => $user->id
+            'user_id' => $user->id,
         ]);
     }
 
@@ -99,7 +126,7 @@ class UserInviteTest extends TestCase
     public function test_token_expires_after_two_weeks()
     {
         Notification::fake();
-        $user = $this->getViewer();
+        $user = $this->users->viewer();
         $inviteService = app(UserInviteService::class);
 
         $inviteService->sendInvitation($user);
@@ -110,6 +137,4 @@ class UserInviteTest extends TestCase
         $setPasswordPageResp->assertRedirect('/password/email');
         $setPasswordPageResp->assertSessionHas('error', 'This invitation link has expired. You can instead try to reset your account password.');
     }
-
-
 }

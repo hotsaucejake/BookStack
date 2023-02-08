@@ -1,31 +1,31 @@
-<?php namespace BookStack\Auth;
+<?php
 
-use Activity;
-use BookStack\Entities\Book;
-use BookStack\Entities\Bookshelf;
-use BookStack\Entities\Chapter;
-use BookStack\Entities\Page;
-use BookStack\Exceptions\NotFoundException;
+namespace BookStack\Auth;
+
+use BookStack\Actions\ActivityType;
+use BookStack\Auth\Access\UserInviteService;
+use BookStack\Entities\EntityProvider;
+use BookStack\Exceptions\NotifyException;
 use BookStack\Exceptions\UserUpdateException;
-use BookStack\Uploads\Image;
+use BookStack\Facades\Activity;
+use BookStack\Uploads\UserAvatars;
 use Exception;
-use Illuminate\Database\Eloquent\Builder;
-use Images;
-use Log;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class UserRepo
 {
-
-    protected $user;
-    protected $role;
+    protected UserAvatars $userAvatar;
+    protected UserInviteService $inviteService;
 
     /**
      * UserRepo constructor.
      */
-    public function __construct(User $user, Role $role)
+    public function __construct(UserAvatars $userAvatar, UserInviteService $inviteService)
     {
-        $this->user = $user;
-        $this->role = $role;
+        $this->userAvatar = $userAvatar;
+        $this->inviteService = $inviteService;
     }
 
     /**
@@ -33,101 +33,209 @@ class UserRepo
      */
     public function getByEmail(string $email): ?User
     {
-        return $this->user->where('email', '=', $email)->first();
+        return User::query()->where('email', '=', $email)->first();
     }
 
     /**
-     * @param int $id
-     * @return User
+     * Get a user by their ID.
      */
-    public function getById($id)
+    public function getById(int $id): User
     {
-        return $this->user->newQuery()->findOrFail($id);
+        return User::query()->findOrFail($id);
     }
 
     /**
-     * Get all the users with their permissions.
-     * @return Builder|static
+     * Get a user by their slug.
      */
-    public function getAllUsers()
+    public function getBySlug(string $slug): User
     {
-        return $this->user->with('roles', 'avatar')->orderBy('name', 'asc')->get();
+        return User::query()->where('slug', '=', $slug)->firstOrFail();
     }
 
     /**
-     * Get all the users with their permissions in a paginated format.
-     * @param int $count
-     * @param $sortData
-     * @return Builder|static
+     * Create a new basic instance of user with the given pre-validated data.
+     *
+     * @param array{name: string, email: string, password: ?string, external_auth_id: ?string, language: ?string, roles: ?array} $data
      */
-    public function getAllUsersPaginatedAndSorted($count, $sortData)
+    public function createWithoutActivity(array $data, bool $emailConfirmed = false): User
     {
-        $query = $this->user->with('roles', 'avatar')->orderBy($sortData['sort'], $sortData['order']);
+        $user = new User();
+        $user->name = $data['name'];
+        $user->email = $data['email'];
+        $user->password = Hash::make(empty($data['password']) ? Str::random(32) : $data['password']);
+        $user->email_confirmed = $emailConfirmed;
+        $user->external_auth_id = $data['external_auth_id'] ?? '';
 
-        if ($sortData['search']) {
-            $term = '%' . $sortData['search'] . '%';
-            $query->where(function ($query) use ($term) {
-                $query->where('name', 'like', $term)
-                    ->orWhere('email', 'like', $term);
-            });
+        $user->refreshSlug();
+        $user->save();
+
+        if (!empty($data['language'])) {
+            setting()->putUser($user, 'language', $data['language']);
         }
 
-        return $query->paginate($count);
-    }
+        if (isset($data['roles'])) {
+            $this->setUserRoles($user, $data['roles']);
+        }
 
-     /**
-     * Creates a new user and attaches a role to them.
-     */
-    public function registerNew(array $data, bool $emailConfirmed = false): User
-    {
-        $user = $this->create($data, $emailConfirmed);
-        $user->attachDefaultRole();
         $this->downloadAndAssignUserAvatar($user);
 
         return $user;
     }
 
     /**
-     * Assign a user to a system-level role.
-     * @param User $user
-     * @param $systemRoleName
-     * @throws NotFoundException
+     * As per "createWithoutActivity" but records a "create" activity.
+     *
+     * @param array{name: string, email: string, password: ?string, external_auth_id: ?string, language: ?string, roles: ?array} $data
      */
-    public function attachSystemRole(User $user, $systemRoleName)
+    public function create(array $data, bool $sendInvite = false): User
     {
-        $role = $this->role->newQuery()->where('system_name', '=', $systemRoleName)->first();
-        if ($role === null) {
-            throw new NotFoundException("Role '{$systemRoleName}' not found");
+        $user = $this->createWithoutActivity($data, true);
+
+        if ($sendInvite) {
+            $this->inviteService->sendInvitation($user);
         }
-        $user->attachRole($role);
+
+        Activity::add(ActivityType::USER_CREATE, $user);
+
+        return $user;
+    }
+
+    /**
+     * Update the given user with the given data.
+     *
+     * @param array{name: ?string, email: ?string, external_auth_id: ?string, password: ?string, roles: ?array<int>, language: ?string} $data
+     *
+     * @throws UserUpdateException
+     */
+    public function update(User $user, array $data, bool $manageUsersAllowed): User
+    {
+        if (!empty($data['name'])) {
+            $user->name = $data['name'];
+            $user->refreshSlug();
+        }
+
+        if (!empty($data['email']) && $manageUsersAllowed) {
+            $user->email = $data['email'];
+        }
+
+        if (!empty($data['external_auth_id']) && $manageUsersAllowed) {
+            $user->external_auth_id = $data['external_auth_id'];
+        }
+
+        if (isset($data['roles']) && $manageUsersAllowed) {
+            $this->setUserRoles($user, $data['roles']);
+        }
+
+        if (!empty($data['password'])) {
+            $user->password = Hash::make($data['password']);
+        }
+
+        if (!empty($data['language'])) {
+            setting()->putUser($user, 'language', $data['language']);
+        }
+
+        $user->save();
+        Activity::add(ActivityType::USER_UPDATE, $user);
+
+        return $user;
+    }
+
+    /**
+     * Remove the given user from storage, Delete all related content.
+     *
+     * @throws Exception
+     */
+    public function destroy(User $user, ?int $newOwnerId = null)
+    {
+        $this->ensureDeletable($user);
+
+        $user->socialAccounts()->delete();
+        $user->apiTokens()->delete();
+        $user->favourites()->delete();
+        $user->mfaValues()->delete();
+        $user->delete();
+
+        // Delete user profile images
+        $this->userAvatar->destroyAllForUser($user);
+
+        // Delete related activities
+        setting()->deleteUserSettings($user->id);
+
+        if (!empty($newOwnerId)) {
+            $newOwner = User::query()->find($newOwnerId);
+            if (!is_null($newOwner)) {
+                $this->migrateOwnership($user, $newOwner);
+            }
+        }
+
+        Activity::add(ActivityType::USER_DELETE, $user);
+    }
+
+    /**
+     * @throws NotifyException
+     */
+    protected function ensureDeletable(User $user): void
+    {
+        if ($this->isOnlyAdmin($user)) {
+            throw new NotifyException(trans('errors.users_cannot_delete_only_admin'), $user->getEditUrl());
+        }
+
+        if ($user->system_name === 'public') {
+            throw new NotifyException(trans('errors.users_cannot_delete_guest'), $user->getEditUrl());
+        }
+    }
+
+    /**
+     * Migrate ownership of items in the system from one user to another.
+     */
+    protected function migrateOwnership(User $fromUser, User $toUser)
+    {
+        $entities = (new EntityProvider())->all();
+        foreach ($entities as $instance) {
+            $instance->newQuery()->where('owned_by', '=', $fromUser->id)
+                ->update(['owned_by' => $toUser->id]);
+        }
+    }
+
+    /**
+     * Get an avatar image for a user and set it as their avatar.
+     * Returns early if avatars disabled or not set in config.
+     */
+    protected function downloadAndAssignUserAvatar(User $user): void
+    {
+        try {
+            $this->userAvatar->fetchAndAssignToUser($user);
+        } catch (Exception $e) {
+            Log::error('Failed to save user avatar image');
+        }
     }
 
     /**
      * Checks if the give user is the only admin.
-     * @param User $user
-     * @return bool
      */
-    public function isOnlyAdmin(User $user)
+    protected function isOnlyAdmin(User $user): bool
     {
         if (!$user->hasSystemRole('admin')) {
             return false;
         }
 
-        $adminRole = $this->role->getSystemRole('admin');
-        if ($adminRole->users->count() > 1) {
+        $adminRole = Role::getSystemRole('admin');
+        if ($adminRole->users()->count() > 1) {
             return false;
         }
+
         return true;
     }
 
     /**
      * Set the assigned user roles via an array of role IDs.
-     * @param User $user
-     * @param array $roles
+     *
      * @throws UserUpdateException
      */
-    public function setUserRoles(User $user, array $roles)
+    protected function setUserRoles(User $user, array $roles)
     {
+        $roles = array_filter(array_values($roles));
+
         if ($this->demotingLastAdmin($user, $roles)) {
             throw new UserUpdateException(trans('errors.role_cannot_remove_only_admin'), $user->getEditUrl());
         }
@@ -138,129 +246,16 @@ class UserRepo
     /**
      * Check if the given user is the last admin and their new roles no longer
      * contains the admin role.
-     * @param User $user
-     * @param array $newRoles
-     * @return bool
      */
-    protected function demotingLastAdmin(User $user, array $newRoles) : bool
+    protected function demotingLastAdmin(User $user, array $newRoles): bool
     {
         if ($this->isOnlyAdmin($user)) {
-            $adminRole = $this->role->getSystemRole('admin');
+            $adminRole = Role::getSystemRole('admin');
             if (!in_array(strval($adminRole->id), $newRoles)) {
                 return true;
             }
         }
 
         return false;
-    }
-
-    /**
-     * Create a new basic instance of user.
-     */
-    public function create(array $data, bool $emailConfirmed = false): User
-    {
-        return $this->user->forceCreate([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
-            'password' => bcrypt($data['password']),
-            'email_confirmed' => $emailConfirmed,
-            'external_auth_id' => $data['external_auth_id'] ?? '',
-        ]);
-    }
-
-    /**
-     * Remove the given user from storage, Delete all related content.
-     * @param User $user
-     * @throws Exception
-     */
-    public function destroy(User $user)
-    {
-        $user->socialAccounts()->delete();
-        $user->apiTokens()->delete();
-        $user->delete();
-        
-        // Delete user profile images
-        $profileImages = Image::where('type', '=', 'user')->where('uploaded_to', '=', $user->id)->get();
-        foreach ($profileImages as $image) {
-            Images::destroy($image);
-        }
-    }
-
-    /**
-     * Get the latest activity for a user.
-     * @param User $user
-     * @param int $count
-     * @param int $page
-     * @return array
-     */
-    public function getActivity(User $user, $count = 20, $page = 0)
-    {
-        return Activity::userActivity($user, $count, $page);
-    }
-
-    /**
-     * Get the recently created content for this given user.
-     */
-    public function getRecentlyCreated(User $user, int $count = 20): array
-    {
-        $query = function (Builder $query) use ($user, $count) {
-            return $query->orderBy('created_at', 'desc')
-                ->where('created_by', '=', $user->id)
-                ->take($count)
-                ->get();
-        };
-
-        return [
-            'pages'    => $query(Page::visible()->where('draft', '=', false)),
-            'chapters' => $query(Chapter::visible()),
-            'books'    => $query(Book::visible()),
-            'shelves'  => $query(Bookshelf::visible()),
-        ];
-    }
-
-    /**
-     * Get asset created counts for the give user.
-     */
-    public function getAssetCounts(User $user): array
-    {
-        $createdBy = ['created_by' => $user->id];
-        return [
-            'pages'    =>  Page::visible()->where($createdBy)->count(),
-            'chapters'    =>  Chapter::visible()->where($createdBy)->count(),
-            'books'    =>  Book::visible()->where($createdBy)->count(),
-            'shelves'    =>  Bookshelf::visible()->where($createdBy)->count(),
-        ];
-    }
-
-    /**
-     * Get the roles in the system that are assignable to a user.
-     * @return mixed
-     */
-    public function getAllRoles()
-    {
-        return $this->role->newQuery()->orderBy('name', 'asc')->get();
-    }
-
-    /**
-     * Get an avatar image for a user and set it as their avatar.
-     * Returns early if avatars disabled or not set in config.
-     * @param User $user
-     * @return bool
-     */
-    public function downloadAndAssignUserAvatar(User $user)
-    {
-        if (!Images::avatarFetchEnabled()) {
-            return false;
-        }
-
-        try {
-            $avatar = Images::saveUserAvatar($user);
-            $user->avatar()->associate($avatar);
-            $user->save();
-            return true;
-        } catch (Exception $e) {
-            Log::error('Failed to save user avatar image');
-            return false;
-        }
     }
 }

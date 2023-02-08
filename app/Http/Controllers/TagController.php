@@ -1,57 +1,67 @@
-<?php namespace BookStack\Http\Controllers;
+<?php
+
+namespace BookStack\Http\Controllers;
 
 use BookStack\Actions\TagRepo;
+use BookStack\Util\SimpleListOptions;
 use Illuminate\Http\Request;
 
 class TagController extends Controller
 {
+    protected TagRepo $tagRepo;
 
-    protected $tagRepo;
-
-    /**
-     * TagController constructor.
-     * @param $tagRepo
-     */
     public function __construct(TagRepo $tagRepo)
     {
         $this->tagRepo = $tagRepo;
-        parent::__construct();
     }
 
     /**
-     * Get all the Tags for a particular entity
-     * @param $entityType
-     * @param $entityId
-     * @return \Illuminate\Http\JsonResponse
+     * Show a listing of existing tags in the system.
      */
-    public function getForEntity($entityType, $entityId)
+    public function index(Request $request)
     {
-        $tags = $this->tagRepo->getForEntity($entityType, $entityId);
-        return response()->json($tags);
+        $listOptions = SimpleListOptions::fromRequest($request, 'tags')->withSortOptions([
+            'name' => trans('common.sort_name'),
+            'usages' => trans('entities.tags_usages'),
+        ]);
+
+        $nameFilter = $request->get('name', '');
+        $tags = $this->tagRepo
+            ->queryWithTotals($listOptions, $nameFilter)
+            ->paginate(50)
+            ->appends(array_filter(array_merge($listOptions->getPaginationAppends(), [
+                'name'   => $nameFilter,
+            ])));
+
+        $this->setPageTitle(trans('entities.tags'));
+
+        return view('tags.index', [
+            'tags'        => $tags,
+            'nameFilter'  => $nameFilter,
+            'listOptions' => $listOptions,
+        ]);
     }
 
     /**
      * Get tag name suggestions from a given search term.
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
      */
     public function getNameSuggestions(Request $request)
     {
-        $searchTerm = $request->get('search', false);
+        $searchTerm = $request->get('search', '');
         $suggestions = $this->tagRepo->getNameSuggestions($searchTerm);
+
         return response()->json($suggestions);
     }
 
     /**
      * Get tag value suggestions from a given search term.
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
      */
     public function getValueSuggestions(Request $request)
     {
-        $searchTerm = $request->get('search', false);
-        $tagName = $request->get('name', false);
+        $searchTerm = $request->get('search', '');
+        $tagName = $request->get('name', '');
         $suggestions = $this->tagRepo->getValueSuggestions($searchTerm, $tagName);
+
         return response()->json($suggestions);
     }
 }

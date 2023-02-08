@@ -1,9 +1,8 @@
 <?php
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
 
-class AddSummaryToPageRevisions extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -28,4 +27,4 @@ class AddSummaryToPageRevisions extends Migration
             $table->dropColumn('summary');
         });
     }
-}
+};

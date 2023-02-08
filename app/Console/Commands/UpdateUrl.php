@@ -48,7 +48,8 @@ class UpdateUrl extends Command
 
         $urlPattern = '/https?:\/\/(.+)/';
         if (!preg_match($urlPattern, $oldUrl) || !preg_match($urlPattern, $newUrl)) {
-            $this->error("The given urls are expected to be full urls starting with http:// or https://");
+            $this->error('The given urls are expected to be full urls starting with http:// or https://');
+
             return 1;
         }
 
@@ -57,23 +58,53 @@ class UpdateUrl extends Command
         }
 
         $columnsToUpdateByTable = [
-            "attachments" => ["path"],
-            "pages" => ["html", "text", "markdown"],
-            "images" => ["url"],
-            "comments" => ["html", "text"],
+            'attachments' => ['path'],
+            'pages'       => ['html', 'text', 'markdown'],
+            'images'      => ['url'],
+            'settings'    => ['value'],
+            'comments'    => ['html', 'text'],
         ];
 
         foreach ($columnsToUpdateByTable as $table => $columns) {
             foreach ($columns as $column) {
-                $changeCount = $this->db->table($table)->update([
-                    $column => $this->db->raw("REPLACE({$column}, '{$oldUrl}', '{$newUrl}')")
-                ]);
+                $changeCount = $this->replaceValueInTable($table, $column, $oldUrl, $newUrl);
                 $this->info("Updated {$changeCount} rows in {$table}->{$column}");
             }
         }
 
-        $this->info("URL update procedure complete.");
+        $jsonColumnsToUpdateByTable = [
+            'settings' => ['value'],
+        ];
+
+        foreach ($jsonColumnsToUpdateByTable as $table => $columns) {
+            foreach ($columns as $column) {
+                $oldJson = trim(json_encode($oldUrl), '"');
+                $newJson = trim(json_encode($newUrl), '"');
+                $changeCount = $this->replaceValueInTable($table, $column, $oldJson, $newJson);
+                $this->info("Updated {$changeCount} JSON encoded rows in {$table}->{$column}");
+            }
+        }
+
+        $this->info('URL update procedure complete.');
+        $this->info('============================================================================');
+        $this->info('Be sure to run "php artisan cache:clear" to clear any old URLs in the cache.');
+        $this->info('============================================================================');
+
         return 0;
+    }
+
+    /**
+     * Perform a find+replace operations in the provided table and column.
+     * Returns the count of rows changed.
+     */
+    protected function replaceValueInTable(string $table, string $column, string $oldUrl, string $newUrl): int
+    {
+        $oldQuoted = $this->db->getPdo()->quote($oldUrl);
+        $newQuoted = $this->db->getPdo()->quote($newUrl);
+
+        return $this->db->table($table)->update([
+            $column => $this->db->raw("REPLACE({$column}, {$oldQuoted}, {$newQuoted})"),
+        ]);
     }
 
     /**
@@ -83,8 +114,8 @@ class UpdateUrl extends Command
     protected function checkUserOkayToProceed(string $oldUrl, string $newUrl): bool
     {
         $dangerWarning = "This will search for \"{$oldUrl}\" in your database and replace it with  \"{$newUrl}\".\n";
-        $dangerWarning .= "Are you sure you want to proceed?";
-        $backupConfirmation = "This operation could cause issues if used incorrectly. Have you made a backup of your existing database?";
+        $dangerWarning .= 'Are you sure you want to proceed?';
+        $backupConfirmation = 'This operation could cause issues if used incorrectly. Have you made a backup of your existing database?';
 
         return $this->confirm($dangerWarning) && $this->confirm($backupConfirmation);
     }

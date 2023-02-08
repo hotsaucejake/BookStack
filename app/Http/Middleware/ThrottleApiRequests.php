@@ -6,7 +6,6 @@ use Illuminate\Routing\Middleware\ThrottleRequests as Middleware;
 
 class ThrottleApiRequests extends Middleware
 {
-
     /**
      * Resolve the number of attempts if the user is authenticated or not.
      */
@@ -14,5 +13,4 @@ class ThrottleApiRequests extends Middleware
     {
         return (int) config('api.requests_per_minute');
     }
-
 }

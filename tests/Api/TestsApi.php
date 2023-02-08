@@ -1,8 +1,9 @@
-<?php namespace Tests\Api;
+<?php
+
+namespace Tests\Api;
 
 trait TestsApi
 {
-
     protected $apiTokenId = 'apitoken';
     protected $apiTokenSecret = 'password';
 
@@ -11,7 +12,18 @@ trait TestsApi
      */
     protected function actingAsApiEditor()
     {
-        $this->actingAs($this->getEditor(), 'api');
+        $this->actingAs($this->users->editor(), 'api');
+
+        return $this;
+    }
+
+    /**
+     * Set the API admin role as the current user via the API driver.
+     */
+    protected function actingAsApiAdmin()
+    {
+        $this->actingAs($this->users->admin(), 'api');
+
         return $this;
     }
 
@@ -20,7 +32,15 @@ trait TestsApi
      */
     protected function errorResponse(string $message, int $code): array
     {
-        return ["error" => ["code" => $code, "message" => $message]];
+        return ['error' => ['code' => $code, 'message' => $message]];
+    }
+
+    /**
+     * Get the structure that matches a permission error response.
+     */
+    protected function permissionErrorResponse(): array
+    {
+        return $this->errorResponse('You do not have permission to perform the requested action.', 403);
     }
 
     /**
@@ -29,18 +49,19 @@ trait TestsApi
      */
     protected function validationResponse(array $messages): array
     {
-        $err = $this->errorResponse("The given data was invalid.", 422);
+        $err = $this->errorResponse('The given data was invalid.', 422);
         $err['error']['validation'] = $messages;
+
         return $err;
     }
+
     /**
      * Get an approved API auth header.
      */
     protected function apiAuthHeader(): array
     {
         return [
-            "Authorization" => "Token {$this->apiTokenId}:{$this->apiTokenSecret}"
+            'Authorization' => "Token {$this->apiTokenId}:{$this->apiTokenSecret}",
         ];
     }
-
 }

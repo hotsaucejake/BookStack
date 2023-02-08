@@ -52,6 +52,10 @@
   &.warning:before {
     background-image: url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9IiNiNjUzMWMiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+ICAgIDxwYXRoIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz4gICAgPHBhdGggZD0iTTEgMjFoMjJMMTIgMiAxIDIxem0xMi0zaC0ydi0yaDJ2MnptMC00aC0ydi00aDJ2NHoiLz48L3N2Zz4=");
   }
+  a {
+    color: inherit;
+    text-decoration: underline;
+  }
 }
 
 /**
@@ -62,7 +66,6 @@
   @include lightDark(background-color, #FFF, #222);
   box-shadow: $bs-card;
   border-radius: 3px;
-  border: 1px solid transparent;
   .body, p.empty-text {
     padding: $-m;
   }
@@ -83,9 +86,31 @@
 .card-title a {
   line-height: 1;
 }
+.card-footer-link, button.card-footer-link  {
+  display: block;
+  padding: $-s $-m;
+  line-height: 1;
+  border-top: 1px solid;
+  width: 100%;
+  text-align: left;
+  @include lightDark(border-color, #DDD, #555);
+  border-radius: 0 0 3px 3px;
+  font-size: 0.9em;
+  margin-top: $-xs;
+  &:hover {
+    text-decoration: none;
+    @include lightDark(background-color, #f2f2f2, #2d2d2d);
+  }
+  &:focus {
+    @include lightDark(background-color, #eee, #222);
+    outline: 1px dotted #666;
+    outline-offset: -2px;
+  }
+}
 
 .card.border-card {
-  border: 1px solid #DDD;
+  border: 1px solid;
+  @include lightDark(border-color, #ddd, #000);
 }
 
 .card.drag-card {
@@ -109,15 +134,18 @@
     flex-grow: 0;
     padding: 0 $-xs;
     &:hover {
-      background-color: #EEE;
+      @include lightDark(background-color, #eee, #2d2d2d);
     }
     .svg-icon {
       margin-inline-end: 0px;
     }
   }
-  > div .outline input {
+  .outline input {
     margin: $-s 0;
     width: 100%;
+  }
+  .outline {
+    position: relative;
   }
   .handle {
     @include lightDark(background-color, #eee, #2d2d2d);
@@ -183,7 +211,7 @@
   padding: $-m $-xxl;
   margin-inline-start: auto;
   margin-inline-end: auto;
-  margin-bottom: $-xl;
+  margin-bottom: $-l;
   overflow: initial;
   min-height: 60vh;
   &.auto-height {
@@ -209,6 +237,31 @@
   }
 }
 
+.sub-card {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  border: 1.5px solid;
+  @include lightDark(border-color, #E2E2E2, #444);
+  border-radius: 4px;
+}
+
+.outline-hover {
+  border: 1px solid transparent !important;
+  &:hover {
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  }
+}
+
+.fade-in-when-active {
+  @include lightDark(opacity, 0.6, 0.7);
+  transition: opacity ease-in-out 120ms;
+  &:hover, &:focus-within {
+    opacity: 1 !important;
+  }
+  @media (prefers-contrast: more) {
+    opacity: 1 !important;
+  }
+}
+
 /**
  * Tags
  */
@@ -217,12 +270,13 @@
   margin-bottom: $-xs;
   margin-inline-end: $-xs;
   border-radius: 4px;
-  border: 1px solid #CCC;
+  border: 1px solid;
   overflow: hidden;
   font-size: 0.85em;
-  a, a:hover, a:active {
+  @include lightDark(border-color, #CCC, #666);
+  a, span, a:hover, a:active {
     padding: 4px 8px;
-    @include lightDark(color, #777, #999);
+    @include lightDark(color, rgba(0, 0, 0, 0.7), rgba(255, 255, 255, 0.8));
     transition: background-color ease-in-out 80ms;
     text-decoration: none;
   }
@@ -230,15 +284,24 @@
     @include lightDark(background-color, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.3));
   }
   svg {
-    fill: #888;
+    @include lightDark(fill, rgba(0, 0, 0, 0.5), rgba(255, 255, 255, 0.5));
   }
   .tag-value {
-    border-inline-start: 1px solid #DDD;
+    border-inline-start: 1px solid;
+    @include lightDark(border-color, #DDD, #666);
     @include lightDark(background-color, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.2))
   }
 }
 
+.tag-name.highlight, .tag-value.highlight {
+  font-weight: bold;
+}
+
 .tag-list div:last-child .tag-item {
+  margin-bottom: 0;
+}
+
+.item-list-row .tag-item {
   margin-bottom: 0;
 }
 
@@ -267,4 +330,6 @@
 .sticky-sidebar {
   position: sticky;
   top: $-m;
+  max-height: calc(100vh - #{$-m});
+  overflow-y: auto;
 }

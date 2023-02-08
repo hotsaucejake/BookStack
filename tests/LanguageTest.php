@@ -1,17 +1,18 @@
-<?php namespace Tests;
+<?php
+
+namespace Tests;
 
 class LanguageTest extends TestCase
 {
-
     protected $langs;
 
     /**
      * LanguageTest constructor.
      */
-    public function setUp(): void
+    protected function setUp(): void
     {
         parent::setUp();
-        $this->langs = array_diff(scandir(resource_path('lang')), ['..', '.']);
+        $this->langs = array_diff(scandir(lang_path('')), ['..', '.']);
     }
 
     public function test_locales_config_key_set_properly()
@@ -57,10 +58,11 @@ class LanguageTest extends TestCase
 
     public function test_all_lang_files_loadable()
     {
-        $files = array_diff(scandir(resource_path('lang/en')), ['..', '.']);
+        $files = array_diff(scandir(lang_path('en')), ['..', '.']);
         foreach ($this->langs as $lang) {
             foreach ($files as $file) {
                 $loadError = false;
+
                 try {
                     $translations = trans(str_replace('.php', '', $file), [], $lang);
                 } catch (\Exception $e) {
@@ -74,10 +76,9 @@ class LanguageTest extends TestCase
     public function test_rtl_config_set_if_lang_is_rtl()
     {
         $this->asEditor();
-        $this->assertFalse(config('app.rtl'), "App RTL config should be false by default");
-        setting()->putUser($this->getEditor(), 'language', 'ar');
+        $this->assertFalse(config('app.rtl'), 'App RTL config should be false by default');
+        setting()->putUser($this->users->editor(), 'language', 'ar');
         $this->get('/');
-        $this->assertTrue(config('app.rtl'), "App RTL config should have been set to true by middleware");
+        $this->assertTrue(config('app.rtl'), 'App RTL config should have been set to true by middleware');
     }
-
 }

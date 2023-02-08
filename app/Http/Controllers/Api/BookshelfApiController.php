@@ -1,8 +1,9 @@
-<?php namespace BookStack\Http\Controllers\Api;
+<?php
 
-use BookStack\Facades\Activity;
+namespace BookStack\Http\Controllers\Api;
+
+use BookStack\Entities\Models\Bookshelf;
 use BookStack\Entities\Repos\BookshelfRepo;
-use BookStack\Entities\Bookshelf;
 use Exception;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Http\Request;
@@ -10,29 +11,8 @@ use Illuminate\Validation\ValidationException;
 
 class BookshelfApiController extends ApiController
 {
+    protected BookshelfRepo $bookshelfRepo;
 
-    /**
-     * @var BookshelfRepo
-     */
-    protected $bookshelfRepo;
-
-    protected $rules = [
-        'create' => [
-            'name' => 'required|string|max:255',
-            'description' => 'string|max:1000',
-            'books' => 'array',
-        ],
-        'update' => [
-            'name' => 'string|min:1|max:255',
-            'description' => 'string|max:1000',
-            'books' => 'array',
-        ],
-    ];
-
-    /**
-     * BookshelfApiController constructor.
-     * @param BookshelfRepo $bookshelfRepo
-     */
     public function __construct(BookshelfRepo $bookshelfRepo)
     {
         $this->bookshelfRepo = $bookshelfRepo;
@@ -44,8 +24,9 @@ class BookshelfApiController extends ApiController
     public function list()
     {
         $shelves = Bookshelf::visible();
+
         return $this->apiListingResponse($shelves, [
-            'id', 'name', 'slug', 'description', 'created_at', 'updated_at', 'created_by', 'updated_by', 'image_id',
+            'id', 'name', 'slug', 'description', 'created_at', 'updated_at', 'created_by', 'updated_by', 'owned_by',
         ]);
     }
 
@@ -53,17 +34,19 @@ class BookshelfApiController extends ApiController
      * Create a new shelf in the system.
      * An array of books IDs can be provided in the request. These
      * will be added to the shelf in the same order as provided.
+     * The cover image of a shelf can be set by sending a file via an 'image' property within a 'multipart/form-data' request.
+     * If the 'image' property is null then the shelf cover image will be removed.
+     *
      * @throws ValidationException
      */
     public function create(Request $request)
     {
         $this->checkPermission('bookshelf-create-all');
-        $requestData = $this->validate($request, $this->rules['create']);
+        $requestData = $this->validate($request, $this->rules()['create']);
 
         $bookIds = $request->get('books', []);
         $shelf = $this->bookshelfRepo->create($requestData, $bookIds);
 
-        Activity::add($shelf, 'bookshelf_create', $shelf->id);
         return response()->json($shelf);
     }
 
@@ -73,11 +56,12 @@ class BookshelfApiController extends ApiController
     public function read(string $id)
     {
         $shelf = Bookshelf::visible()->with([
-            'tags', 'cover', 'createdBy', 'updatedBy',
+            'tags', 'cover', 'createdBy', 'updatedBy', 'ownedBy',
             'books' => function (BelongsToMany $query) {
-                $query->visible()->get(['id', 'name', 'slug']);
-            }
+                $query->scopes('visible')->get(['id', 'name', 'slug']);
+            },
         ])->findOrFail($id);
+
         return response()->json($shelf);
     }
 
@@ -86,6 +70,9 @@ class BookshelfApiController extends ApiController
      * An array of books IDs can be provided in the request. These
      * will be added to the shelf in the same order as provided and overwrite
      * any existing book assignments.
+     * The cover image of a shelf can be set by sending a file via an 'image' property within a 'multipart/form-data' request.
+     * If the 'image' property is null then the shelf cover image will be removed.
+     *
      * @throws ValidationException
      */
     public function update(Request $request, string $id)
@@ -93,20 +80,18 @@ class BookshelfApiController extends ApiController
         $shelf = Bookshelf::visible()->findOrFail($id);
         $this->checkOwnablePermission('bookshelf-update', $shelf);
 
-        $requestData = $this->validate($request, $this->rules['update']);
-
+        $requestData = $this->validate($request, $this->rules()['update']);
         $bookIds = $request->get('books', null);
 
         $shelf = $this->bookshelfRepo->update($shelf, $requestData, $bookIds);
-        Activity::add($shelf, 'bookshelf_update', $shelf->id);
 
         return response()->json($shelf);
     }
 
-
-
     /**
-     * Delete a single shelf from the system.
+     * Delete a single shelf.
+     * This will typically send the shelf to the recycle bin.
+     *
      * @throws Exception
      */
     public function delete(string $id)
@@ -115,8 +100,27 @@ class BookshelfApiController extends ApiController
         $this->checkOwnablePermission('bookshelf-delete', $shelf);
 
         $this->bookshelfRepo->destroy($shelf);
-        Activity::addMessage('bookshelf_delete', $shelf->name);
 
         return response('', 204);
+    }
+
+    protected function rules(): array
+    {
+        return [
+            'create' => [
+                'name'        => ['required', 'string', 'max:255'],
+                'description' => ['string', 'max:1000'],
+                'books'       => ['array'],
+                'tags'        => ['array'],
+                'image'       => array_merge(['nullable'], $this->getImageValidationRules()),
+            ],
+            'update' => [
+                'name'        => ['string', 'min:1', 'max:255'],
+                'description' => ['string', 'max:1000'],
+                'books'       => ['array'],
+                'tags'        => ['array'],
+                'image'       => array_merge(['nullable'], $this->getImageValidationRules()),
+            ],
+        ];
     }
 }

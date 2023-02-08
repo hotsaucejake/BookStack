@@ -1,10 +1,10 @@
 <?php
 
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-class CreateCommentsTable extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -35,17 +35,16 @@ class CreateCommentsTable extends Migration
             $entity = 'Comment';
             foreach ($ops as $op) {
                 $permissionId = DB::table('role_permissions')->insertGetId([
-                    'name' => strtolower($entity) . '-' . strtolower(str_replace(' ', '-', $op)),
+                    'name'         => strtolower($entity) . '-' . strtolower(str_replace(' ', '-', $op)),
                     'display_name' => $op . ' ' . $entity . 's',
-                    'created_at' => \Carbon\Carbon::now()->toDateTimeString(),
-                    'updated_at' => \Carbon\Carbon::now()->toDateTimeString()
+                    'created_at'   => \Carbon\Carbon::now()->toDateTimeString(),
+                    'updated_at'   => \Carbon\Carbon::now()->toDateTimeString(),
                 ]);
                 DB::table('permission_role')->insert([
-                    'role_id' => $adminRoleId,
-                    'permission_id' => $permissionId
+                    'role_id'       => $adminRoleId,
+                    'permission_id' => $permissionId,
                 ]);
             }
-
         });
     }
 
@@ -65,4 +64,4 @@ class CreateCommentsTable extends Migration
             DB::table('role_permissions')->where('name', '=', $permName)->delete();
         }
     }
-}
+};
