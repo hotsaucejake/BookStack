@@ -1,9 +1,9 @@
 <?php
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 
-class AddEntityAccessControls extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -32,7 +32,7 @@ class AddEntityAccessControls extends Migration
             $table->index('restricted');
         });
 
-        Schema::create('restrictions', function(Blueprint $table) {
+        Schema::create('restrictions', function (Blueprint $table) {
             $table->increments('id');
             $table->integer('restrictable_id');
             $table->string('restrictable_type');
@@ -63,11 +63,10 @@ class AddEntityAccessControls extends Migration
             $table->dropColumn('restricted');
         });
 
-
         Schema::table('pages', function (Blueprint $table) {
             $table->dropColumn('restricted');
         });
 
         Schema::drop('restrictions');
     }
-}
+};

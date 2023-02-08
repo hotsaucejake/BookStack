@@ -1,109 +1,59 @@
-import dropdown from "./dropdown";
-import overlay from "./overlay";
-import backToTop from "./back-to-top";
-import notification from "./notification";
-import chapterToggle from "./chapter-toggle";
-import expandToggle from "./expand-toggle";
-import entitySelectorPopup from "./entity-selector-popup";
-import entitySelector from "./entity-selector";
-import sidebar from "./sidebar";
-import pagePicker from "./page-picker";
-import pageComments from "./page-comments";
-import wysiwygEditor from "./wysiwyg-editor";
-import markdownEditor from "./markdown-editor";
-import editorToolbox from "./editor-toolbox";
-import imagePicker from "./image-picker";
-import collapsible from "./collapsible";
-import toggleSwitch from "./toggle-switch";
-import pageDisplay from "./page-display";
-import shelfSort from "./shelf-sort";
-import homepageControl from "./homepage-control";
-import headerMobileToggle from "./header-mobile-toggle";
-import listSortControl from "./list-sort-control";
-import triLayout from "./tri-layout";
-import breadcrumbListing from "./breadcrumb-listing";
-import permissionsTable from "./permissions-table";
-import customCheckbox from "./custom-checkbox";
-import bookSort from "./book-sort";
-import settingAppColorPicker from "./setting-app-color-picker";
-import settingColorPicker from "./setting-color-picker";
-import entityPermissionsEditor from "./entity-permissions-editor";
-import templateManager from "./template-manager";
-import newUserPassword from "./new-user-password";
-import detailsHighlighter from "./details-highlighter";
-import codeHighlighter from "./code-highlighter";
-
-const componentMapping = {
-    'dropdown': dropdown,
-    'overlay': overlay,
-    'back-to-top': backToTop,
-    'notification': notification,
-    'chapter-toggle': chapterToggle,
-    'expand-toggle': expandToggle,
-    'entity-selector-popup': entitySelectorPopup,
-    'entity-selector': entitySelector,
-    'sidebar': sidebar,
-    'page-picker': pagePicker,
-    'page-comments': pageComments,
-    'wysiwyg-editor': wysiwygEditor,
-    'markdown-editor': markdownEditor,
-    'editor-toolbox': editorToolbox,
-    'image-picker': imagePicker,
-    'collapsible': collapsible,
-    'toggle-switch': toggleSwitch,
-    'page-display': pageDisplay,
-    'shelf-sort': shelfSort,
-    'homepage-control': homepageControl,
-    'header-mobile-toggle': headerMobileToggle,
-    'list-sort-control': listSortControl,
-    'tri-layout': triLayout,
-    'breadcrumb-listing': breadcrumbListing,
-    'permissions-table': permissionsTable,
-    'custom-checkbox': customCheckbox,
-    'book-sort': bookSort,
-    'setting-app-color-picker': settingAppColorPicker,
-    'setting-color-picker': settingColorPicker,
-    'entity-permissions-editor': entityPermissionsEditor,
-    'template-manager': templateManager,
-    'new-user-password': newUserPassword,
-    'details-highlighter': detailsHighlighter,
-    'code-highlighter': codeHighlighter,
-};
-
-window.components = {};
-
-const componentNames = Object.keys(componentMapping);
-
-/**
- * Initialize components of the given name within the given element.
- * @param {String} componentName
- * @param {HTMLElement|Document} parentElement
- */
-function initComponent(componentName, parentElement) {
-    let elems = parentElement.querySelectorAll(`[${componentName}]`);
-    if (elems.length === 0) return;
-
-    let component = componentMapping[componentName];
-    if (typeof window.components[componentName] === "undefined") window.components[componentName] = [];
-    for (let j = 0, jLen = elems.length; j < jLen; j++) {
-        let instance = new component(elems[j]);
-        if (typeof elems[j].components === 'undefined') elems[j].components = {};
-        elems[j].components[componentName] = instance;
-        window.components[componentName].push(instance);
-    }
-}
-
-/**
- * Initialize all components found within the given element.
- * @param parentElement
- */
-function initAll(parentElement) {
-    if (typeof parentElement === 'undefined') parentElement = document;
-    for (let i = 0, len = componentNames.length; i < len; i++) {
-        initComponent(componentNames[i], parentElement);
-    }
-}
-
-window.components.init = initAll;
-
-export default initAll;
+export {AddRemoveRows} from "./add-remove-rows.js"
+export {AjaxDeleteRow} from "./ajax-delete-row.js"
+export {AjaxForm} from "./ajax-form.js"
+export {Attachments} from "./attachments.js"
+export {AttachmentsList} from "./attachments-list.js"
+export {AutoSuggest} from "./auto-suggest.js"
+export {AutoSubmit} from "./auto-submit.js"
+export {BackToTop} from "./back-to-top.js"
+export {BookSort} from "./book-sort.js"
+export {ChapterContents} from "./chapter-contents.js"
+export {CodeEditor} from "./code-editor.js"
+export {CodeHighlighter} from "./code-highlighter.js"
+export {CodeTextarea} from "./code-textarea.js"
+export {Collapsible} from "./collapsible.js"
+export {ConfirmDialog} from "./confirm-dialog"
+export {CustomCheckbox} from "./custom-checkbox.js"
+export {DetailsHighlighter} from "./details-highlighter.js"
+export {Dropdown} from "./dropdown.js"
+export {DropdownSearch} from "./dropdown-search.js"
+export {Dropzone} from "./dropzone.js"
+export {EditorToolbox} from "./editor-toolbox.js"
+export {EntityPermissions} from "./entity-permissions"
+export {EntitySearch} from "./entity-search.js"
+export {EntitySelector} from "./entity-selector.js"
+export {EntitySelectorPopup} from "./entity-selector-popup.js"
+export {EventEmitSelect} from "./event-emit-select.js"
+export {ExpandToggle} from "./expand-toggle.js"
+export {GlobalSearch} from "./global-search.js"
+export {HeaderMobileToggle} from "./header-mobile-toggle.js"
+export {ImageManager} from "./image-manager.js"
+export {ImagePicker} from "./image-picker.js"
+export {ListSortControl} from "./list-sort-control.js"
+export {MarkdownEditor} from "./markdown-editor.js"
+export {NewUserPassword} from "./new-user-password.js"
+export {Notification} from "./notification.js"
+export {OptionalInput} from "./optional-input.js"
+export {PageComments} from "./page-comments.js"
+export {PageDisplay} from "./page-display.js"
+export {PageEditor} from "./page-editor.js"
+export {PagePicker} from "./page-picker.js"
+export {PermissionsTable} from "./permissions-table.js"
+export {Pointer} from "./pointer.js"
+export {Popup} from "./popup.js"
+export {SettingAppColorScheme} from "./setting-app-color-scheme.js"
+export {SettingColorPicker} from "./setting-color-picker.js"
+export {SettingHomepageControl} from "./setting-homepage-control.js"
+export {ShelfSort} from "./shelf-sort.js"
+export {Shortcuts} from "./shortcuts"
+export {ShortcutInput} from "./shortcut-input"
+export {SortableList} from "./sortable-list.js"
+export {SubmitOnChange} from "./submit-on-change.js"
+export {Tabs} from "./tabs.js"
+export {TagManager} from "./tag-manager.js"
+export {TemplateManager} from "./template-manager.js"
+export {ToggleSwitch} from "./toggle-switch.js"
+export {TriLayout} from "./tri-layout.js"
+export {UserSelect} from "./user-select.js"
+export {WebhookEvents} from "./webhook-events"
+export {WysiwygEditor} from "./wysiwyg-editor.js"

@@ -1,28 +1,28 @@
-<?php namespace BookStack\Entities\Repos;
+<?php
 
+namespace BookStack\Entities\Repos;
+
+use BookStack\Actions\ActivityType;
 use BookStack\Actions\TagRepo;
-use BookStack\Entities\Book;
-use BookStack\Entities\Managers\TrashCan;
+use BookStack\Entities\Models\Book;
+use BookStack\Entities\Tools\TrashCan;
 use BookStack\Exceptions\ImageUploadException;
 use BookStack\Exceptions\NotFoundException;
-use BookStack\Exceptions\NotifyException;
+use BookStack\Facades\Activity;
 use BookStack\Uploads\ImageRepo;
 use Exception;
-use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 
 class BookRepo
 {
-
     protected $baseRepo;
     protected $tagRepo;
     protected $imageRepo;
 
     /**
      * BookRepo constructor.
-     * @param $tagRepo
      */
     public function __construct(BaseRepo $baseRepo, TagRepo $tagRepo, ImageRepo $imageRepo)
     {
@@ -36,7 +36,7 @@ class BookRepo
      */
     public function getAllPaginated(int $count = 20, string $sort = 'name', string $order = 'asc'): LengthAwarePaginator
     {
-        return Book::visible()->orderBy($sort, $order)->paginate($count);
+        return Book::visible()->with('cover')->orderBy($sort, $order)->paginate($count);
     }
 
     /**
@@ -85,12 +85,15 @@ class BookRepo
     }
 
     /**
-     * Create a new book in the system
+     * Create a new book in the system.
      */
     public function create(array $input): Book
     {
         $book = new Book();
         $this->baseRepo->create($book, $input);
+        $this->baseRepo->updateCoverImage($book, $input['image'] ?? null);
+        Activity::add(ActivityType::BOOK_CREATE, $book);
+
         return $book;
     }
 
@@ -100,11 +103,19 @@ class BookRepo
     public function update(Book $book, array $input): Book
     {
         $this->baseRepo->update($book, $input);
+
+        if (array_key_exists('image', $input)) {
+            $this->baseRepo->updateCoverImage($book, $input['image'], $input['image'] === null);
+        }
+
+        Activity::add(ActivityType::BOOK_UPDATE, $book);
+
         return $book;
     }
 
     /**
      * Update the given book's cover image, or clear it.
+     *
      * @throws ImageUploadException
      * @throws Exception
      */
@@ -114,21 +125,16 @@ class BookRepo
     }
 
     /**
-     * Update the permissions of a book.
-     */
-    public function updatePermissions(Book $book, bool $restricted, Collection $permissions = null)
-    {
-        $this->baseRepo->updatePermissions($book, $restricted, $permissions);
-    }
-
-    /**
      * Remove a book from the system.
-     * @throws NotifyException
-     * @throws BindingResolutionException
+     *
+     * @throws Exception
      */
     public function destroy(Book $book)
     {
         $trashCan = new TrashCan();
-        $trashCan->destroyBook($book);
+        $trashCan->softDestroyBook($book);
+        Activity::add(ActivityType::BOOK_DELETE, $book);
+
+        $trashCan->autoClearOld();
     }
 }

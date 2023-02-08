@@ -1,9 +1,9 @@
 <?php
 
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 
-class CreateUsersTable extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -23,11 +23,11 @@ class CreateUsersTable extends Migration
 
         // Create the initial admin user
         DB::table('users')->insert([
-            'name' => 'Admin',
-            'email' => 'admin@admin.com',
-            'password' => bcrypt('password'),
+            'name'       => 'Admin',
+            'email'      => 'admin@admin.com',
+            'password'   => bcrypt('password'),
             'created_at' => \Carbon\Carbon::now()->toDateTimeString(),
-            'updated_at' => \Carbon\Carbon::now()->toDateTimeString()
+            'updated_at' => \Carbon\Carbon::now()->toDateTimeString(),
         ]);
     }
 
@@ -40,4 +40,4 @@ class CreateUsersTable extends Migration
     {
         Schema::drop('users');
     }
-}
+};

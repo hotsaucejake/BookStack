@@ -1,5 +1,5 @@
 let iFrame = null;
-
+let lastApprovedOrigin;
 let onInit, onSave;
 
 /**
@@ -19,15 +19,22 @@ function show(drawioUrl, onInitCallback, onSaveCallback) {
     iFrame.setAttribute('class', 'fullscreen');
     iFrame.style.backgroundColor = '#FFFFFF';
     document.body.appendChild(iFrame);
+    lastApprovedOrigin = (new URL(drawioUrl)).origin;
 }
 
 function close() {
     drawEventClose();
 }
 
+/**
+ * Receive and handle a message event from the draw.io window.
+ * @param {MessageEvent} event
+ */
 function drawReceive(event) {
     if (!event.data || event.data.length < 1) return;
-    let message = JSON.parse(event.data);
+    if (event.origin !== lastApprovedOrigin) return;
+
+    const message = JSON.parse(event.data);
     if (message.event === 'init') {
         drawEventInit();
     } else if (message.event === 'exit') {
@@ -36,6 +43,8 @@ function drawReceive(event) {
         drawEventSave(message);
     } else if (message.event === 'export') {
         drawEventExport(message);
+    } else if (message.event === 'configure') {
+        drawEventConfigure();
     }
 }
 
@@ -56,13 +65,19 @@ function drawEventInit() {
     });
 }
 
+function drawEventConfigure() {
+    const config = {};
+    window.$events.emitPublic(iFrame, 'editor-drawio::configure', {config});
+    drawPostMessage({action: 'configure', config});
+}
+
 function drawEventClose() {
     window.removeEventListener('message', drawReceive);
     if (iFrame) document.body.removeChild(iFrame);
 }
 
 function drawPostMessage(data) {
-    iFrame.contentWindow.postMessage(JSON.stringify(data), '*');
+    iFrame.contentWindow.postMessage(JSON.stringify(data), lastApprovedOrigin);
 }
 
 async function upload(imageData, pageUploadedToId) {
@@ -80,8 +95,16 @@ async function upload(imageData, pageUploadedToId) {
  * @returns {Promise<string>}
  */
 async function load(drawingId) {
-    const resp = await window.$http.get(window.baseUrl(`/images/drawio/base64/${drawingId}`));
-    return `data:image/png;base64,${resp.data.content}`;
+    try {
+        const resp = await window.$http.get(window.baseUrl(`/images/drawio/base64/${drawingId}`));
+        return `data:image/png;base64,${resp.data.content}`;
+    } catch (error) {
+        if (error instanceof window.$http.HttpError) {
+            window.$events.showResponseError(error);
+        }
+        close();
+        throw error;
+    }
 }
 
 export default {show, close, upload, load};

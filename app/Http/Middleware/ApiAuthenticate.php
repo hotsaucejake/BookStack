@@ -9,8 +9,6 @@ use Illuminate\Http\Request;
 
 class ApiAuthenticate
 {
-    use ChecksForEmailConfirmation;
-
     /**
      * Handle an incoming request.
      */
@@ -29,6 +27,7 @@ class ApiAuthenticate
     /**
      * Ensure the current user can access authenticated API routes, either via existing session
      * authentication or via API Token authentication.
+     *
      * @throws UnauthorizedException
      */
     protected function ensureAuthorizedBySessionOrToken(): void
@@ -36,10 +35,10 @@ class ApiAuthenticate
         // Return if the user is already found to be signed in via session-based auth.
         // This is to make it easy to browser the API via browser after just logging into the system.
         if (signedInUser() || session()->isStarted()) {
-            $this->ensureEmailConfirmedIfRequested();
-            if (!user()->can('access-api')) {
+            if (!$this->sessionUserHasApiAccess()) {
                 throw new ApiAuthException(trans('errors.api_user_no_api_permission'), 403);
             }
+
             return;
         }
 
@@ -48,7 +47,16 @@ class ApiAuthenticate
 
         // Validate the token and it's users API access
         auth()->authenticate();
-        $this->ensureEmailConfirmedIfRequested();
+    }
+
+    /**
+     * Check if the active session user has API access.
+     */
+    protected function sessionUserHasApiAccess(): bool
+    {
+        $hasApiPermission = user()->can('access-api');
+
+        return $hasApiPermission && hasAppAccess();
     }
 
     /**
@@ -58,9 +66,9 @@ class ApiAuthenticate
     {
         return response()->json([
             'error' => [
-                'code' => $code,
+                'code'    => $code,
                 'message' => $message,
-            ]
+            ],
         ], $code);
     }
 }

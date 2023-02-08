@@ -1,11 +1,9 @@
-@extends('simple-layout')
+@extends('layouts.simple')
 
 @section('body')
     <div class="container small">
 
-        <div class="py-m">
-            @include('settings.navbar', ['selected' => 'roles'])
-        </div>
+        @include('settings.parts.navbar', ['selected' => 'roles'])
 
         <div class="card content-wrap auto-height">
             <h1 class="list-heading"> {{ trans('settings.role_delete') }}</h1>
@@ -19,7 +17,7 @@
                 @if($role->users->count() > 0)
                     <div class="form-group">
                         <p>{{ trans('settings.role_delete_users_assigned', ['userCount' => $role->users->count()]) }}</p>
-                        @include('form.role-select', ['options' => $roles, 'name' => 'migration_role_id'])
+                        @include('form.role-select', ['options' => $roles, 'name' => 'migrate_role_id'])
                     </div>
                 @endif
 

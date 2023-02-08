@@ -1,62 +1,54 @@
-<?php namespace BookStack\Http\Controllers\Images;
+<?php
 
-use BookStack\Entities\Page;
+namespace BookStack\Http\Controllers\Images;
+
 use BookStack\Exceptions\ImageUploadException;
+use BookStack\Exceptions\NotFoundException;
 use BookStack\Http\Controllers\Controller;
-use BookStack\Repos\PageRepo;
 use BookStack\Uploads\Image;
 use BookStack\Uploads\ImageRepo;
-use Illuminate\Filesystem\Filesystem as File;
+use BookStack\Uploads\ImageService;
+use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ImageController extends Controller
 {
-    protected $image;
-    protected $file;
-    protected $imageRepo;
+    protected ImageRepo $imageRepo;
+    protected ImageService $imageService;
 
-    /**
-     * ImageController constructor.
-     * @param Image $image
-     * @param File $file
-     * @param ImageRepo $imageRepo
-     */
-    public function __construct(Image $image, File $file, ImageRepo $imageRepo)
+    public function __construct(ImageRepo $imageRepo, ImageService $imageService)
     {
-        $this->image = $image;
-        $this->file = $file;
         $this->imageRepo = $imageRepo;
-        parent::__construct();
+        $this->imageService = $imageService;
     }
 
     /**
      * Provide an image file from storage.
-     * @param string $path
-     * @return mixed
+     *
+     * @throws NotFoundException
      */
     public function showImage(string $path)
     {
-        $path = storage_path('uploads/images/' . $path);
-        if (!file_exists($path)) {
-            abort(404);
+        if (!$this->imageService->pathAccessibleInLocalSecure($path)) {
+            throw (new NotFoundException(trans('errors.image_not_found')))
+                ->setSubtitle(trans('errors.image_not_found_subtitle'))
+                ->setDetails(trans('errors.image_not_found_details'));
         }
 
-        return response()->file($path);
+        return $this->imageService->streamImageFromStorageResponse('gallery', $path);
     }
 
-
     /**
-     * Update image details
-     * @param Request $request
-     * @param integer $id
-     * @return \Illuminate\Http\JsonResponse
+     * Update image details.
+     *
      * @throws ImageUploadException
-     * @throws \Exception
+     * @throws ValidationException
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, string $id)
     {
         $this->validate($request, [
-            'name' => 'required|min:2|string'
+            'name' => ['required', 'min:2', 'string'],
         ]);
 
         $image = $this->imageRepo->getById($id);
@@ -64,47 +56,55 @@ class ImageController extends Controller
         $this->checkOwnablePermission('image-update', $image);
 
         $image = $this->imageRepo->updateImageDetails($image, $request->all());
-        return response()->json($image);
+
+        $this->imageRepo->loadThumbs($image);
+
+        return view('pages.parts.image-manager-form', [
+            'image'          => $image,
+            'dependantPages' => null,
+        ]);
     }
 
     /**
-     * Show the usage of an image on pages.
+     * Get the form for editing the given image.
+     *
+     * @throws Exception
      */
-    public function usage(int $id)
+    public function edit(Request $request, string $id)
     {
         $image = $this->imageRepo->getById($id);
         $this->checkImagePermission($image);
 
-        $pages = Page::visible()->where('html', 'like', '%' . $image->url . '%')->get(['id', 'name', 'slug', 'book_id']);
-        foreach ($pages as $page) {
-            $page->url = $page->getUrl();
-            $page->html = '';
-            $page->text = '';
+        if ($request->has('delete')) {
+            $dependantPages = $this->imageRepo->getPagesUsingImage($image);
         }
-        $result = count($pages) > 0 ? $pages : false;
 
-        return response()->json($result);
+        $this->imageRepo->loadThumbs($image);
+
+        return view('pages.parts.image-manager-form', [
+            'image'          => $image,
+            'dependantPages' => $dependantPages ?? null,
+        ]);
     }
 
     /**
-     * Deletes an image and all thumbnail/image files
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     * @throws \Exception
+     * Deletes an image and all thumbnail/image files.
+     *
+     * @throws Exception
      */
-    public function destroy($id)
+    public function destroy(string $id)
     {
         $image = $this->imageRepo->getById($id);
         $this->checkOwnablePermission('image-delete', $image);
         $this->checkImagePermission($image);
 
         $this->imageRepo->destroyImage($image);
-        return response()->json(trans('components.images_deleted'));
+
+        return response('');
     }
 
     /**
      * Check related page permission and ensure type is drawio or gallery.
-     * @param Image $image
      */
     protected function checkImagePermission(Image $image)
     {

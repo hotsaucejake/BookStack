@@ -2,8 +2,15 @@
 
 namespace BookStack\Console\Commands;
 
+use BookStack\Auth\Role;
 use BookStack\Auth\UserRepo;
+use BookStack\Exceptions\NotFoundException;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rules\Unique;
+use Symfony\Component\Console\Command\Command as SymfonyCommand;
 
 class CreateAdmin extends Command
 {
@@ -15,7 +22,8 @@ class CreateAdmin extends Command
     protected $signature = 'bookstack:create-admin
                             {--email= : The email address for the new admin user}
                             {--name= : The name of the new admin user}
-                            {--password= : The password to assign to the new admin user}';
+                            {--password= : The password to assign to the new admin user}
+                            {--external-auth-id= : The external authentication system id for the new admin user (SAML2/LDAP/OIDC)}';
 
     /**
      * The console command description.
@@ -28,8 +36,6 @@ class CreateAdmin extends Command
 
     /**
      * Create a new command instance.
-     *
-     * @param UserRepo $userRepo
      */
     public function __construct(UserRepo $userRepo)
     {
@@ -40,46 +46,62 @@ class CreateAdmin extends Command
     /**
      * Execute the console command.
      *
+     * @throws NotFoundException
+     *
      * @return mixed
-     * @throws \BookStack\Exceptions\NotFoundException
      */
     public function handle()
     {
-        $email = trim($this->option('email'));
-        if (empty($email)) {
-            $email = $this->ask('Please specify an email address for the new admin user');
-        }
-        if (mb_strlen($email) < 5 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return $this->error('Invalid email address provided');
+        $details = $this->snakeCaseOptions();
+
+        if (empty($details['email'])) {
+            $details['email'] = $this->ask('Please specify an email address for the new admin user');
         }
 
-        if ($this->userRepo->getByEmail($email) !== null) {
-            return $this->error('A user with the provided email already exists!');
+        if (empty($details['name'])) {
+            $details['name'] = $this->ask('Please specify a name for the new admin user');
         }
 
-        $name = trim($this->option('name'));
-        if (empty($name)) {
-            $name = $this->ask('Please specify an name for the new admin user');
-        }
-        if (mb_strlen($name) < 2) {
-            return $this->error('Invalid name provided');
-        }
-
-        $password = trim($this->option('password'));
-        if (empty($password)) {
-            $password = $this->secret('Please specify a password for the new admin user');
-        }
-        if (mb_strlen($password) < 5) {
-            return $this->error('Invalid password provided, Must be at least 5 characters');
+        if (empty($details['password'])) {
+            if (empty($details['external_auth_id'])) {
+                $details['password'] = $this->ask('Please specify a password for the new admin user (8 characters min)');
+            } else {
+                $details['password'] = Str::random(32);
+            }
         }
 
+        $validator = Validator::make($details, [
+            'email'            => ['required', 'email', 'min:5', new Unique('users', 'email')],
+            'name'             => ['required', 'min:2'],
+            'password'         => ['required_without:external_auth_id', Password::default()],
+            'external_auth_id' => ['required_without:password'],
+        ]);
 
-        $user = $this->userRepo->create(['email' => $email, 'name' => $name, 'password' => $password]);
-        $this->userRepo->attachSystemRole($user, 'admin');
-        $this->userRepo->downloadAndAssignUserAvatar($user);
+        if ($validator->fails()) {
+            foreach ($validator->errors()->all() as $error) {
+                $this->error($error);
+            }
+
+            return SymfonyCommand::FAILURE;
+        }
+
+        $user = $this->userRepo->createWithoutActivity($validator->validated());
+        $user->attachRole(Role::getSystemRole('admin'));
         $user->email_confirmed = true;
         $user->save();
 
         $this->info("Admin account with email \"{$user->email}\" successfully created!");
+
+        return SymfonyCommand::SUCCESS;
+    }
+
+    protected function snakeCaseOptions(): array
+    {
+        $returnOpts = [];
+        foreach ($this->options() as $key => $value) {
+            $returnOpts[str_replace('-', '_', $key)] = $value;
+        }
+
+        return $returnOpts;
     }
 }

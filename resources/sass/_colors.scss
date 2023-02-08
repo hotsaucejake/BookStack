@@ -9,10 +9,13 @@
   background-color: var(--color-primary-light);
   @include whenDark {
     background: #000;
-    .text-primary {
+    .text-link {
       color: #AAA !important;
     }
   }
+}
+.link-background {
+  background-color: var(--color-link) !important;
 }
 
 /*
@@ -41,6 +44,11 @@
   fill: var(--color-primary) !important;
 }
 
+.text-link, .text-link:hover, .text-link-hover:hover  {
+  color: var(--color-link) !important;
+  fill: var(--color-link) !important;
+}
+
 .text-muted {
   @include lightDark(color, #575757, #888888, true);
   fill: currentColor !important;
@@ -48,6 +56,11 @@
 
 .text-dark {
   @include lightDark(color, #222, #ccc, true);
+  fill: currentColor !important;
+}
+
+.text-white {
+  color: #fff;
   fill: currentColor !important;
 }
 
@@ -87,12 +100,6 @@
 .bg-chapter {
   background-color: var(--color-chapter);
 }
-.bg-shelf {
+.bg-bookshelf {
   background-color: var(--color-bookshelf);
-}
-
-.bg-shelf, .bg-book {
-  @include whenDark {
-    filter: brightness(67%) saturate(80%);
-  }
 }

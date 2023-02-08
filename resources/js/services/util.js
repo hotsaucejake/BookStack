@@ -6,9 +6,9 @@
  * N milliseconds. If `immediate` is passed, trigger the function on the
  * leading edge, instead of the trailing.
  * @attribution https://davidwalsh.name/javascript-debounce-function
- * @param func
- * @param wait
- * @param immediate
+ * @param {Function} func
+ * @param {Number} wait
+ * @param {Boolean} immediate
  * @returns {Function}
  */
 export function debounce(func, wait, immediate) {
@@ -34,7 +34,7 @@ export function scrollAndHighlightElement(element) {
     if (!element) return;
     element.scrollIntoView({behavior: 'smooth'});
 
-    const color = document.getElementById('custom-styles').getAttribute('data-color-light');
+    const color = getComputedStyle(document.body).getPropertyValue('--color-primary-light');
     const initColor = window.getComputedStyle(element).getPropertyValue('background-color');
     element.style.backgroundColor = color;
     setTimeout(() => {
@@ -45,4 +45,29 @@ export function scrollAndHighlightElement(element) {
         element.classList.remove('selectFade');
         element.style.backgroundColor = '';
     }, 3000);
+}
+
+/**
+ * Escape any HTML in the given 'unsafe' string.
+ * Take from https://stackoverflow.com/a/6234804.
+ * @param {String} unsafe
+ * @returns {string}
+ */
+export function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+/**
+ * Generate a random unique ID.
+ *
+ * @returns {string}
+ */
+export function uniqueId() {
+    const S4 = () => (((1+Math.random())*0x10000)|0).toString(16).substring(1);
+    return (S4()+S4()+"-"+S4()+"-"+S4()+"-"+S4()+"-"+S4()+S4()+S4());
 }

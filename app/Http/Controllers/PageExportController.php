@@ -2,33 +2,31 @@
 
 namespace BookStack\Http\Controllers;
 
-use BookStack\Entities\ExportService;
-use BookStack\Entities\Managers\PageContent;
 use BookStack\Entities\Repos\PageRepo;
+use BookStack\Entities\Tools\ExportFormatter;
+use BookStack\Entities\Tools\PageContent;
 use BookStack\Exceptions\NotFoundException;
 use Throwable;
 
 class PageExportController extends Controller
 {
-
     protected $pageRepo;
-    protected $exportService;
+    protected $exportFormatter;
 
     /**
      * PageExportController constructor.
-     * @param PageRepo $pageRepo
-     * @param ExportService $exportService
      */
-    public function __construct(PageRepo $pageRepo, ExportService $exportService)
+    public function __construct(PageRepo $pageRepo, ExportFormatter $exportFormatter)
     {
         $this->pageRepo = $pageRepo;
-        $this->exportService = $exportService;
-        parent::__construct();
+        $this->exportFormatter = $exportFormatter;
+        $this->middleware('can:content-export');
     }
 
     /**
      * Exports a page to a PDF.
-     * https://github.com/barryvdh/laravel-dompdf
+     * https://github.com/barryvdh/laravel-dompdf.
+     *
      * @throws NotFoundException
      * @throws Throwable
      */
@@ -36,12 +34,14 @@ class PageExportController extends Controller
     {
         $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
         $page->html = (new PageContent($page))->render();
-        $pdfContent = $this->exportService->pageToPdf($page);
-        return $this->downloadResponse($pdfContent, $pageSlug . '.pdf');
+        $pdfContent = $this->exportFormatter->pageToPdf($page);
+
+        return $this->download()->directly($pdfContent, $pageSlug . '.pdf');
     }
 
     /**
      * Export a page to a self-contained HTML file.
+     *
      * @throws NotFoundException
      * @throws Throwable
      */
@@ -49,18 +49,34 @@ class PageExportController extends Controller
     {
         $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
         $page->html = (new PageContent($page))->render();
-        $containedHtml = $this->exportService->pageToContainedHtml($page);
-        return $this->downloadResponse($containedHtml, $pageSlug . '.html');
+        $containedHtml = $this->exportFormatter->pageToContainedHtml($page);
+
+        return $this->download()->directly($containedHtml, $pageSlug . '.html');
     }
 
     /**
      * Export a page to a simple plaintext .txt file.
+     *
      * @throws NotFoundException
      */
     public function plainText(string $bookSlug, string $pageSlug)
     {
         $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
-        $pageText = $this->exportService->pageToPlainText($page);
-        return $this->downloadResponse($pageText, $pageSlug . '.txt');
+        $pageText = $this->exportFormatter->pageToPlainText($page);
+
+        return $this->download()->directly($pageText, $pageSlug . '.txt');
+    }
+
+    /**
+     * Export a page to a simple markdown .md file.
+     *
+     * @throws NotFoundException
+     */
+    public function markdown(string $bookSlug, string $pageSlug)
+    {
+        $page = $this->pageRepo->getBySlug($bookSlug, $pageSlug);
+        $pageText = $this->exportFormatter->pageToMarkdown($page);
+
+        return $this->download()->directly($pageText, $pageSlug . '.md');
     }
 }

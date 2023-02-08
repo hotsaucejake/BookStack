@@ -1,41 +1,57 @@
-<?php namespace BookStack\Entities\Repos;
+<?php
 
-use BookStack\Entities\Book;
-use BookStack\Entities\Chapter;
-use BookStack\Entities\Entity;
-use BookStack\Entities\Managers\BookContents;
-use BookStack\Entities\Managers\PageContent;
-use BookStack\Entities\Managers\TrashCan;
-use BookStack\Entities\Page;
-use BookStack\Entities\PageRevision;
+namespace BookStack\Entities\Repos;
+
+use BookStack\Actions\ActivityType;
+use BookStack\Entities\Models\Book;
+use BookStack\Entities\Models\Chapter;
+use BookStack\Entities\Models\Entity;
+use BookStack\Entities\Models\Page;
+use BookStack\Entities\Models\PageRevision;
+use BookStack\Entities\Tools\BookContents;
+use BookStack\Entities\Tools\PageContent;
+use BookStack\Entities\Tools\PageEditorData;
+use BookStack\Entities\Tools\TrashCan;
 use BookStack\Exceptions\MoveOperationException;
 use BookStack\Exceptions\NotFoundException;
-use BookStack\Exceptions\NotifyException;
 use BookStack\Exceptions\PermissionsException;
-use Illuminate\Database\Eloquent\Builder;
+use BookStack\Facades\Activity;
+use BookStack\References\ReferenceStore;
+use BookStack\References\ReferenceUpdater;
+use Exception;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
 
 class PageRepo
 {
-
-    protected $baseRepo;
+    protected BaseRepo $baseRepo;
+    protected RevisionRepo $revisionRepo;
+    protected ReferenceStore $referenceStore;
+    protected ReferenceUpdater $referenceUpdater;
 
     /**
      * PageRepo constructor.
      */
-    public function __construct(BaseRepo $baseRepo)
-    {
+    public function __construct(
+        BaseRepo $baseRepo,
+        RevisionRepo $revisionRepo,
+        ReferenceStore $referenceStore,
+        ReferenceUpdater $referenceUpdater
+    ) {
         $this->baseRepo = $baseRepo;
+        $this->revisionRepo = $revisionRepo;
+        $this->referenceStore = $referenceStore;
+        $this->referenceUpdater = $referenceUpdater;
     }
 
     /**
      * Get a page by ID.
+     *
      * @throws NotFoundException
      */
-    public function getById(int $id): Page
+    public function getById(int $id, array $relations = ['book']): Page
     {
-        $page = Page::visible()->with(['book'])->find($id);
+        /** @var Page $page */
+        $page = Page::visible()->with($relations)->find($id);
 
         if (!$page) {
             throw new NotFoundException(trans('errors.page_not_found'));
@@ -46,6 +62,7 @@ class PageRepo
 
     /**
      * Get a page its book and own slug.
+     *
      * @throws NotFoundException
      */
     public function getBySlug(string $bookSlug, string $pageSlug): Page
@@ -65,17 +82,9 @@ class PageRepo
      */
     public function getByOldSlug(string $bookSlug, string $pageSlug): ?Page
     {
-        $revision = PageRevision::query()
-            ->whereHas('page', function (Builder $query) {
-                $query->visible();
-            })
-            ->where('slug', '=', $pageSlug)
-            ->where('type', '=', 'version')
-            ->where('book_slug', '=', $bookSlug)
-            ->orderBy('created_at', 'desc')
-            ->with('page')
-            ->first();
-        return $revision ? $revision->page : null;
+        $revision = $this->revisionRepo->getBySlugs($bookSlug, $pageSlug);
+
+        return $revision->page ?? null;
     }
 
     /**
@@ -105,7 +114,7 @@ class PageRepo
     public function getParentFromSlugs(string $bookSlug, string $chapterSlug = null): Entity
     {
         if ($chapterSlug !== null) {
-            return $chapter = Chapter::visible()->whereSlugs($bookSlug, $chapterSlug)->firstOrFail();
+            return Chapter::visible()->whereSlugs($bookSlug, $chapterSlug)->firstOrFail();
         }
 
         return Book::visible()->where('slug', '=', $bookSlug)->firstOrFail();
@@ -116,8 +125,7 @@ class PageRepo
      */
     public function getUserDraft(Page $page): ?PageRevision
     {
-        $revision = $this->getUserDraftQuery($page)->first();
-        return $revision;
+        return $this->revisionRepo->getLatestDraftForCurrentUser($page);
     }
 
     /**
@@ -126,10 +134,11 @@ class PageRepo
     public function getNewDraftPage(Entity $parent)
     {
         $page = (new Page())->forceFill([
-            'name' => trans('entities.pages_initial_name'),
+            'name'       => trans('entities.pages_initial_name'),
             'created_by' => user()->id,
+            'owned_by'   => user()->id,
             'updated_by' => user()->id,
-            'draft' => true,
+            'draft'      => true,
         ]);
 
         if ($parent instanceof Chapter) {
@@ -141,6 +150,7 @@ class PageRepo
 
         $page->save();
         $page->refresh()->rebuildPermissions();
+
         return $page;
     }
 
@@ -149,22 +159,21 @@ class PageRepo
      */
     public function publishDraft(Page $draft, array $input): Page
     {
+        $this->updateTemplateStatusAndContentFromInput($draft, $input);
         $this->baseRepo->update($draft, $input);
-        if (isset($input['template']) && userCan('templates-manage')) {
-            $draft->template = ($input['template'] === 'true');
-        }
 
-        $pageContent = new PageContent($draft);
-        $pageContent->setNewHTML($input['html']);
         $draft->draft = false;
         $draft->revision_count = 1;
         $draft->priority = $this->getNewPriority($draft);
-        $draft->refreshSlug();
         $draft->save();
 
-        $this->savePageRevision($draft, trans('entities.pages_initial_revision'));
-        $draft->indexForSearch();
-        return $draft->refresh();
+        $this->revisionRepo->storeNewForPage($draft, trans('entities.pages_initial_revision'));
+        $this->referenceStore->updateForPage($draft);
+        $draft->refresh();
+
+        Activity::add(ActivityType::PAGE_CREATE, $draft);
+
+        return $draft;
     }
 
     /**
@@ -175,59 +184,59 @@ class PageRepo
         // Hold the old details to compare later
         $oldHtml = $page->html;
         $oldName = $page->name;
+        $oldMarkdown = $page->markdown;
 
+        $this->updateTemplateStatusAndContentFromInput($page, $input);
+        $this->baseRepo->update($page, $input);
+        $this->referenceStore->updateForPage($page);
+
+        // Update with new details
+        $page->revision_count++;
+        $page->save();
+
+        // Remove all update drafts for this user & page.
+        $this->revisionRepo->deleteDraftsForCurrentUser($page);
+
+        // Save a revision after updating
+        $summary = trim($input['summary'] ?? '');
+        $htmlChanged = isset($input['html']) && $input['html'] !== $oldHtml;
+        $nameChanged = isset($input['name']) && $input['name'] !== $oldName;
+        $markdownChanged = isset($input['markdown']) && $input['markdown'] !== $oldMarkdown;
+        if ($htmlChanged || $nameChanged || $markdownChanged || $summary) {
+            $this->revisionRepo->storeNewForPage($page, $summary);
+        }
+
+        Activity::add(ActivityType::PAGE_UPDATE, $page);
+
+        return $page;
+    }
+
+    protected function updateTemplateStatusAndContentFromInput(Page $page, array $input)
+    {
         if (isset($input['template']) && userCan('templates-manage')) {
             $page->template = ($input['template'] === 'true');
         }
 
         $pageContent = new PageContent($page);
-        $pageContent->setNewHTML($input['html']);
-        $this->baseRepo->update($page, $input);
+        $currentEditor = $page->editor ?: PageEditorData::getSystemDefaultEditor();
+        $newEditor = $currentEditor;
 
-        // Update with new details
-        $page->revision_count++;
+        $haveInput = isset($input['markdown']) || isset($input['html']);
+        $inputEmpty = empty($input['markdown']) && empty($input['html']);
 
-        if (setting('app-editor') !== 'markdown') {
-            $page->markdown = '';
+        if ($haveInput && $inputEmpty) {
+            $pageContent->setNewHTML('');
+        } elseif (!empty($input['markdown']) && is_string($input['markdown'])) {
+            $newEditor = 'markdown';
+            $pageContent->setNewMarkdown($input['markdown']);
+        } elseif (isset($input['html'])) {
+            $newEditor = 'wysiwyg';
+            $pageContent->setNewHTML($input['html']);
         }
 
-        $page->save();
-
-        // Remove all update drafts for this user & page.
-        $this->getUserDraftQuery($page)->delete();
-
-        // Save a revision after updating
-        $summary = $input['summary'] ?? null;
-        if ($oldHtml !== $input['html'] || $oldName !== $input['name'] || $summary !== null) {
-            $this->savePageRevision($page, $summary);
+        if ($newEditor !== $currentEditor && userCan('editor-change')) {
+            $page->editor = $newEditor;
         }
-
-        return $page;
-    }
-
-    /**
-     * Saves a page revision into the system.
-     */
-    protected function savePageRevision(Page $page, string $summary = null)
-    {
-        $revision = new PageRevision($page->getAttributes());
-
-        if (setting('app-editor') !== 'markdown') {
-            $revision->markdown = '';
-        }
-
-        $revision->page_id = $page->id;
-        $revision->slug = $page->slug;
-        $revision->book_slug = $page->book->slug;
-        $revision->created_by = user()->id;
-        $revision->created_at = $page->updated_at;
-        $revision->type = 'version';
-        $revision->summary = $summary;
-        $revision->revision_number = $page->revision_count;
-        $revision->save();
-
-        $this->deleteOldRevisions($page);
-        return $revision;
     }
 
     /**
@@ -237,34 +246,41 @@ class PageRepo
     {
         // If the page itself is a draft simply update that
         if ($page->draft) {
+            $this->updateTemplateStatusAndContentFromInput($page, $input);
             $page->fill($input);
-            if (isset($input['html'])) {
-                $content = new PageContent($page);
-                $content->setNewHTML($input['html']);
-            }
             $page->save();
+
             return $page;
         }
 
-        // Otherwise save the data to a revision
-        $draft = $this->getPageRevisionToUpdate($page);
+        // Otherwise, save the data to a revision
+        $draft = $this->revisionRepo->getNewDraftForCurrentUser($page);
         $draft->fill($input);
-        if (setting('app-editor') !== 'markdown') {
+
+        if (!empty($input['markdown'])) {
+            $draft->markdown = $input['markdown'];
+            $draft->html = '';
+        } else {
+            $draft->html = $input['html'];
             $draft->markdown = '';
         }
 
         $draft->save();
+
         return $draft;
     }
 
     /**
      * Destroy a page from the system.
-     * @throws NotifyException
+     *
+     * @throws Exception
      */
     public function destroy(Page $page)
     {
         $trashCan = new TrashCan();
-        $trashCan->destroyPage($page);
+        $trashCan->softDestroyPage($page);
+        Activity::add(ActivityType::PAGE_DELETE, $page);
+        $trashCan->autoClearOld();
     }
 
     /**
@@ -272,32 +288,52 @@ class PageRepo
      */
     public function restoreRevision(Page $page, int $revisionId): Page
     {
+        $oldUrl = $page->getUrl();
         $page->revision_count++;
-        $this->savePageRevision($page);
 
+        /** @var PageRevision $revision */
         $revision = $page->revisions()->where('id', '=', $revisionId)->first();
+
         $page->fill($revision->toArray());
         $content = new PageContent($page);
-        $content->setNewHTML($revision->html);
+
+        if (!empty($revision->markdown)) {
+            $content->setNewMarkdown($revision->markdown);
+        } else {
+            $content->setNewHTML($revision->html);
+        }
+
         $page->updated_by = user()->id;
         $page->refreshSlug();
         $page->save();
-
         $page->indexForSearch();
+        $this->referenceStore->updateForPage($page);
+
+        $summary = trans('entities.pages_revision_restored_from', ['id' => strval($revisionId), 'summary' => $revision->summary]);
+        $this->revisionRepo->storeNewForPage($page, $summary);
+
+        if ($oldUrl !== $page->getUrl()) {
+            $this->referenceUpdater->updateEntityPageReferences($page, $oldUrl);
+        }
+
+        Activity::add(ActivityType::PAGE_RESTORE, $page);
+        Activity::add(ActivityType::REVISION_RESTORE, $revision);
+
         return $page;
     }
 
     /**
      * Move the given page into a new parent book or chapter.
      * The $parentIdentifier must be a string of the following format:
-     * 'book:<id>' (book:5)
+     * 'book:<id>' (book:5).
+     *
      * @throws MoveOperationException
      * @throws PermissionsException
      */
-    public function move(Page $page, string $parentIdentifier): Book
+    public function move(Page $page, string $parentIdentifier): Entity
     {
         $parent = $this->findParentByIdentifier($parentIdentifier);
-        if ($parent === null) {
+        if (is_null($parent)) {
             throw new MoveOperationException('Book or chapter to move page into not found');
         }
 
@@ -306,55 +342,23 @@ class PageRepo
         }
 
         $page->chapter_id = ($parent instanceof Chapter) ? $parent->id : null;
-        $page->changeBook($parent instanceof Book ? $parent->id : $parent->book->id);
+        $newBookId = ($parent instanceof Chapter) ? $parent->book->id : $parent->id;
+        $page->changeBook($newBookId);
         $page->rebuildPermissions();
 
-        return ($parent instanceof Book ? $parent : $parent->book);
+        Activity::add(ActivityType::PAGE_MOVE, $page);
+
+        return $parent;
     }
 
     /**
-     * Copy an existing page in the system.
-     * Optionally providing a new parent via string identifier and a new name.
-     * @throws MoveOperationException
-     * @throws PermissionsException
-     */
-    public function copy(Page $page, string $parentIdentifier = null, string $newName = null): Page
-    {
-        $parent = $parentIdentifier ? $this->findParentByIdentifier($parentIdentifier) : $page->parent();
-        if ($parent === null) {
-            throw new MoveOperationException('Book or chapter to move page into not found');
-        }
-
-        if (!userCan('page-create', $parent)) {
-            throw new PermissionsException('User does not have permission to create a page within the new parent');
-        }
-
-        $copyPage = $this->getNewDraftPage($parent);
-        $pageData = $page->getAttributes();
-
-        // Update name
-        if (!empty($newName)) {
-            $pageData['name'] = $newName;
-        }
-
-        // Copy tags from previous page if set
-        if ($page->tags) {
-            $pageData['tags'] = [];
-            foreach ($page->tags as $tag) {
-                $pageData['tags'][] = ['name' => $tag->name, 'value' => $tag->value];
-            }
-        }
-
-        return $this->publishDraft($copyPage, $pageData);
-    }
-
-    /**
-     * Find a page parent entity via a identifier string in the format:
+     * Find a page parent entity via an identifier string in the format:
      * {type}:{id}
-     * Example: (book:5)
+     * Example: (book:5).
+     *
      * @throws MoveOperationException
      */
-    protected function findParentByIdentifier(string $identifier): ?Entity
+    public function findParentByIdentifier(string $identifier): ?Entity
     {
         $stringExploded = explode(':', $identifier);
         $entityType = $stringExploded[0];
@@ -365,96 +369,23 @@ class PageRepo
         }
 
         $parentClass = $entityType === 'book' ? Book::class : Chapter::class;
+
         return $parentClass::visible()->where('id', '=', $entityId)->first();
     }
 
     /**
-     * Update the permissions of a page.
-     */
-    public function updatePermissions(Page $page, bool $restricted, Collection $permissions = null)
-    {
-        $this->baseRepo->updatePermissions($page, $restricted, $permissions);
-    }
-
-    /**
-     * Change the page's parent to the given entity.
-     */
-    protected function changeParent(Page $page, Entity $parent)
-    {
-        $book = ($parent instanceof Book) ? $parent : $parent->book;
-        $page->chapter_id = ($parent instanceof Chapter) ? $parent->id : 0;
-        $page->save();
-
-        if ($page->book->id !== $book->id) {
-            $page->changeBook($book->id);
-        }
-
-        $page->load('book');
-        $book->rebuildPermissions();
-    }
-
-    /**
-     * Get a page revision to update for the given page.
-     * Checks for an existing revisions before providing a fresh one.
-     */
-    protected function getPageRevisionToUpdate(Page $page): PageRevision
-    {
-        $drafts = $this->getUserDraftQuery($page)->get();
-        if ($drafts->count() > 0) {
-            return $drafts->first();
-        }
-
-        $draft = new PageRevision();
-        $draft->page_id = $page->id;
-        $draft->slug = $page->slug;
-        $draft->book_slug = $page->book->slug;
-        $draft->created_by = user()->id;
-        $draft->type = 'update_draft';
-        return $draft;
-    }
-
-    /**
-     * Delete old revisions, for the given page, from the system.
-     */
-    protected function deleteOldRevisions(Page $page)
-    {
-        $revisionLimit = config('app.revision_limit');
-        if ($revisionLimit === false) {
-            return;
-        }
-
-        $revisionsToDelete = PageRevision::query()
-            ->where('page_id', '=', $page->id)
-            ->orderBy('created_at', 'desc')
-            ->skip(intval($revisionLimit))
-            ->take(10)
-            ->get(['id']);
-        if ($revisionsToDelete->count() > 0) {
-            PageRevision::query()->whereIn('id', $revisionsToDelete->pluck('id'))->delete();
-        }
-    }
-
-    /**
-     * Get a new priority for a page
+     * Get a new priority for a page.
      */
     protected function getNewPriority(Page $page): int
     {
-        if ($page->parent() instanceof Chapter) {
-            $lastPage = $page->parent()->pages('desc')->first();
+        $parent = $page->getParent();
+        if ($parent instanceof Chapter) {
+            /** @var ?Page $lastPage */
+            $lastPage = $parent->pages('desc')->first();
+
             return $lastPage ? $lastPage->priority + 1 : 0;
         }
 
         return (new BookContents($page->book))->getLastPriority() + 1;
-    }
-
-    /**
-     * Get the query to find the user's draft copies of the given page.
-     */
-    protected function getUserDraftQuery(Page $page)
-    {
-        return PageRevision::query()->where('created_by', '=', user()->id)
-            ->where('type', 'update_draft')
-            ->where('page_id', '=', $page->id)
-            ->orderBy('created_at', 'desc');
     }
 }

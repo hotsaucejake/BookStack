@@ -1,10 +1,10 @@
 <?php
 
 use BookStack\Uploads\Image;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 
-class AddImageUploadTypes extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
@@ -18,7 +18,7 @@ class AddImageUploadTypes extends Migration
             $table->string('type')->index();
         });
 
-        Image::all()->each(function($image) {
+        Image::all()->each(function ($image) {
             $image->path = $image->url;
             $image->type = 'gallery';
             $image->save();
@@ -36,6 +36,5 @@ class AddImageUploadTypes extends Migration
             $table->dropColumn('type');
             $table->dropColumn('path');
         });
-
     }
-}
+};
